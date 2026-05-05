@@ -1,0 +1,25 @@
+.courses-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.create-course-card {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.course-card {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.course-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
+  .courses-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
