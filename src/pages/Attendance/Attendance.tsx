@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebase';
 import { createAttendanceSession, endAttendanceSession, subscribeToSession } from '../../services/attendanceService';
 import { getStudentByStudentId, getStudents } from '../../services/studentService';
+import { getLecturerCourses, Course } from '../../services/courseService';
 import { logActivity } from '../../services/activityService';
 import './Attendance.css';
 
@@ -33,26 +34,53 @@ const Attendance: React.FC = () => {
   const [scannedStudents, setScannedStudents] = useState<ScannedStudent[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [lecturerCourses, setLecturerCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [activeCourseInfo, setActiveCourseInfo] = useState<{code: string, title: string} | null>(null);
 
   useEffect(() => {
     fetchStudents();
     
     // Listen for active sessions (for students)
-    const q = onSnapshot(doc(db, 'system', 'status'), (snap) => {
+    const q = onSnapshot(doc(db, 'system', 'status'), async (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         if (data.activeSessionId) {
           setSessionId(data.activeSessionId);
           setIsSessionActive(true);
+          
+          // Fetch session details to get course info
+          const sessionSnap = await getDoc(doc(db, 'sessions', data.activeSessionId));
+          if (sessionSnap.exists()) {
+            const sessionData = sessionSnap.data();
+            setActiveCourseInfo({
+              code: sessionData.courseId || '',
+              title: sessionData.courseName || ''
+            });
+          }
         } else {
           setIsSessionActive(false);
           setSessionId('');
+          setActiveCourseInfo(null);
         }
       }
     });
 
+    if (profile?.role === 'lecturer' || profile?.role === 'admin') {
+      loadLecturerCourses();
+    }
+
     return () => q();
-  }, []);
+  }, [profile]);
+
+  const loadLecturerCourses = async () => {
+    if (!profile) return;
+    const data = await getLecturerCourses(profile.uid);
+    setLecturerCourses(data);
+    if (data.length > 0) {
+      setSelectedCourseId(data[0].id || '');
+    }
+  };
 
   const fetchStudents = async () => {
     const data = await getStudents();
@@ -104,15 +132,23 @@ const Attendance: React.FC = () => {
   };
 
   const startSession = async () => {
-    if (!profile) return;
+    if (!profile || !selectedCourseId) {
+      if (!selectedCourseId) alert("Please select a course first.");
+      return;
+    }
+    
+    const selectedCourse = lecturerCourses.find(c => c.id === selectedCourseId);
+    if (!selectedCourse) return;
+
     try {
-      const newSessionId = await createAttendanceSession(profile.uid, 'CS101');
+      const newSessionId = await createAttendanceSession(profile.uid, selectedCourse.code, selectedCourse.title);
       // Update global system status so students see the session
       await setDoc(doc(db, 'system', 'status'), { activeSessionId: newSessionId }, { merge: true });
-      await logActivity(profile.uid, profile.name, 'Started Session', 'Course: CS101', 'attendance');
+      await logActivity(profile.uid, profile.name, 'Started Session', `Course: ${selectedCourse.code}`, 'attendance');
       setSessionId(newSessionId);
       setIsSessionActive(true);
       setTimeLeft(1200);
+      setActiveCourseInfo({ code: selectedCourse.code, title: selectedCourse.title });
     } catch (error) {
       console.error("Error starting session:", error);
     }
@@ -122,10 +158,11 @@ const Attendance: React.FC = () => {
     if (sessionId) {
       await endAttendanceSession(sessionId);
       await setDoc(doc(db, 'system', 'status'), { activeSessionId: null }, { merge: true });
-      await logActivity(profile?.uid || 'system', profile?.name || 'Lecturer', 'Ended Session', 'Course: CS101', 'attendance');
+      await logActivity(profile?.uid || 'system', profile?.name || 'Lecturer', 'Ended Session', `Course: ${activeCourseInfo?.code || 'Unknown'}`, 'attendance');
     }
     setIsSessionActive(false);
     setSessionId('');
+    setActiveCourseInfo(null);
   };
 
   const handleStudentScan = async (studentId: string) => {
@@ -163,7 +200,7 @@ const Attendance: React.FC = () => {
     <div className="attendance-page">
       <div className="attendance-header">
         <h1>{profile.role === 'student' ? 'Mark Attendance' : 'Attendance Session'}</h1>
-        <p>{profile.role === 'student' ? 'CS101 - Introduction to Computer Science' : 'Generate and monitor the lecture QR code'}</p>
+        <p>{isSessionActive && activeCourseInfo ? `${activeCourseInfo.code} - ${activeCourseInfo.title}` : (profile.role === 'student' ? 'Wait for a session to start' : 'Generate and monitor the lecture QR code')}</p>
       </div>
 
       <div className="attendance-container">
@@ -228,10 +265,28 @@ const Attendance: React.FC = () => {
 
                 <div className="session-controls">
                   {!isSessionActive ? (
-                    <button className="start-btn" onClick={startSession}>
-                      <Play size={20} fill="currentColor" />
-                      Start Session
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+                      <div className="form-group" style={{ textAlign: 'left' }}>
+                        <label style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'block' }}>Select Course</label>
+                        <select 
+                          value={selectedCourseId}
+                          onChange={(e) => setSelectedCourseId(e.target.value)}
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                        >
+                          {lecturerCourses.length === 0 ? (
+                            <option value="">No courses available</option>
+                          ) : (
+                            lecturerCourses.map(course => (
+                              <option key={course.id} value={course.id}>{course.code} - {course.title}</option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                      <button className="start-btn" onClick={startSession} disabled={lecturerCourses.length === 0}>
+                        <Play size={20} fill="currentColor" />
+                        Start Session
+                      </button>
+                    </div>
                   ) : (
                     <button className="stop-btn" onClick={stopSession}>
                       <Square size={20} fill="currentColor" />

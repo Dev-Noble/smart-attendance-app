@@ -16,16 +16,18 @@ export interface AttendanceSession {
   id?: string;
   lecturerId: string;
   courseId: string;
+  courseName: string;
   startTime: any;
   endTime?: any;
   isActive: boolean;
   studentsPresent: string[]; // List of student IDs
 }
 
-export const createAttendanceSession = async (lecturerId: string, courseId: string) => {
+export const createAttendanceSession = async (lecturerId: string, courseId: string, courseName: string) => {
   const sessionData: AttendanceSession = {
     lecturerId,
     courseId,
+    courseName,
     startTime: serverTimestamp(),
     isActive: true,
     studentsPresent: []
