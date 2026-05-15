@@ -16,6 +16,7 @@ import StudentProfile from './pages/Students/StudentProfile';
 import ManageCourses from './pages/Courses/ManageCourses';
 import RegisterCourse from './pages/Courses/RegisterCourse';
 import Biodata from './pages/Biodata/Biodata';
+import AdminPanel from './pages/Admin/AdminPanel';
 
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
               <Route path="biodata" element={<Biodata />} />
               <Route path="courses/manage" element={<ManageCourses />} />
               <Route path="courses/register" element={<RegisterCourse />} />
+              <Route path="admin" element={<AdminPanel />} />
             </Route>
           </Route>
         </Routes>

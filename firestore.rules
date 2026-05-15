@@ -51,10 +51,10 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow read: if isSignedIn();
       allow create: if isLecturer();
-      // Allow students to append their ID to the studentsPresent array
+      // Allow students to append their studentId + deviceFingerprint only
       allow update: if isLecturer() || (
         isSignedIn() && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentsPresent'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentsPresent', 'deviceFingerprints'])
       );
       allow delete: if isAdmin();
     }

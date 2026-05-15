@@ -20,17 +20,32 @@ export interface AttendanceSession {
   startTime: any;
   endTime?: any;
   isActive: boolean;
-  studentsPresent: string[]; // List of student IDs
+  studentsPresent: string[];      // List of student IDs
+  deviceFingerprints: string[];   // One fingerprint per device — blocks impersonation
+  lecturerLocation?: {            // GPS captured when session starts
+    lat: number;
+    lng: number;
+  };
+  allowedRadius: number;          // Metres student must be within (default 100)
 }
 
-export const createAttendanceSession = async (lecturerId: string, courseId: string, courseName: string) => {
+export const createAttendanceSession = async (
+  lecturerId: string,
+  courseId: string,
+  courseName: string,
+  lecturerLocation?: { lat: number; lng: number },
+  allowedRadius: number = 100
+) => {
   const sessionData: AttendanceSession = {
     lecturerId,
     courseId,
     courseName,
     startTime: serverTimestamp(),
     isActive: true,
-    studentsPresent: []
+    studentsPresent: [],
+    deviceFingerprints: [],
+    lecturerLocation,
+    allowedRadius
   };
 
   const docRef = await addDoc(collection(db, 'sessions'), sessionData);

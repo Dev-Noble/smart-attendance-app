@@ -3,37 +3,44 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { CheckCircle, Loader2, AlertCircle, LogIn } from 'lucide-react';
+import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, MapPin } from 'lucide-react';
 import { logActivity } from '../../services/activityService';
+import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
+import { getCurrentPosition, getDistanceMeters } from '../../utils/geolocation';
 import './Attendance.css';
+
+type StatusType = 'loading' | 'success' | 'error' | 'already-marked';
 
 const MarkAttendance: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'already-marked'>('loading');
+  const [status, setStatus] = useState<StatusType>('loading');
   const [message, setMessage] = useState('');
+  const [detail, setDetail] = useState('');
 
   useEffect(() => {
     if (authLoading) return;
 
     if (!profile) {
-      // Store the session ID in local storage so we can mark attendance after login
       if (sessionId) localStorage.setItem('pendingAttendance', sessionId);
       setStatus('error');
-      setMessage('You need to be logged in to mark attendance.');
+      setMessage('Login Required');
+      setDetail('You need to be logged in to mark attendance.');
       return;
     }
 
     if (profile.role !== 'student') {
       setStatus('error');
-      setMessage('Only student accounts can mark attendance via this link.');
+      setMessage('Students Only');
+      setDetail('Only student accounts can mark attendance via this link.');
       return;
     }
 
     if (!profile.studentId) {
       setStatus('error');
-      setMessage('Please set your Student ID in Settings before marking attendance.');
+      setMessage('Student ID Missing');
+      setDetail('Please complete your Biodata and set your Student ID before marking attendance.');
       return;
     }
 
@@ -49,64 +56,132 @@ const MarkAttendance: React.FC = () => {
 
       if (!sessionSnap.exists()) {
         setStatus('error');
-        setMessage('This attendance session does not exist or has expired.');
+        setMessage('Session Not Found');
+        setDetail('This attendance session does not exist or has expired.');
         return;
       }
 
-      if (sessionSnap.data().status === 'ended') {
+      const sessionData = sessionSnap.data();
+
+      if (!sessionData.isActive) {
         setStatus('error');
-        setMessage('This session has already ended.');
+        setMessage('Session Ended');
+        setDetail('This session has already ended. Please contact your lecturer.');
         return;
       }
 
-      const presentList = sessionSnap.data().studentsPresent || [];
-      if (presentList.includes(profile.studentId)) {
+      // ── Check 1: Already marked ────────────────────────────────────────────
+      if ((sessionData.studentsPresent || []).includes(profile.studentId)) {
         setStatus('already-marked');
-        setMessage('You have already marked your attendance for this session.');
+        setMessage('Already Recorded');
+        setDetail('Your attendance for this session has already been marked.');
         return;
       }
 
-      // Add student to session
+      // ── Check 2: Device Fingerprint ────────────────────────────────────────
+      const fingerprint = await getDeviceFingerprint();
+      const usedFingerprints: string[] = sessionData.deviceFingerprints || [];
+
+      if (usedFingerprints.includes(fingerprint)) {
+        setStatus('error');
+        setMessage('Device Already Used');
+        setDetail('This device has already been used to mark attendance in this session. You cannot mark attendance for multiple accounts from the same device.');
+        return;
+      }
+
+      // ── Check 3: Geolocation Radius ────────────────────────────────────────
+      if (sessionData.lecturerLocation) {
+        try {
+          setDetail('Verifying your location...');
+          const studentLocation = await getCurrentPosition();
+          const distance = getDistanceMeters(sessionData.lecturerLocation, studentLocation);
+          const radius = sessionData.allowedRadius ?? 100;
+
+          if (distance > radius) {
+            setStatus('error');
+            setMessage('Outside Classroom');
+            setDetail(`You are ${Math.round(distance)}m away from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
+            return;
+          }
+        } catch (geoErr: any) {
+          setStatus('error');
+          setMessage('Location Required');
+          setDetail(geoErr.message);
+          return;
+        }
+      }
+
+      // ── All checks passed ──────────────────────────────────────────────────
       await updateDoc(sessionRef, {
-        studentsPresent: arrayUnion(profile.studentId)
+        studentsPresent: arrayUnion(profile.studentId),
+        deviceFingerprints: arrayUnion(fingerprint)
       });
 
-      // Log the activity
-      await logActivity(profile.uid, profile.name, 'Marked Attendance', `Joined session via QR code`, 'attendance');
+      await logActivity(
+        profile.uid,
+        profile.name,
+        'Marked Attendance',
+        `Joined session via QR code`,
+        'attendance'
+      );
 
-      setStatus('success');
-      setMessage('Attendance successfully recorded!');
-      
-      // Clear pending attendance if it exists
       localStorage.removeItem('pendingAttendance');
+      setStatus('success');
+      setMessage('Attendance Recorded!');
+      setDetail('Your presence has been successfully logged for this session.');
+
     } catch (error) {
-      console.error("Error marking attendance:", error);
+      console.error('Error marking attendance:', error);
       setStatus('error');
-      setMessage('Failed to mark attendance. Please try again or contact your lecturer.');
+      setMessage('Something Went Wrong');
+      setDetail('Failed to mark attendance. Please try again or contact your lecturer.');
     }
   };
 
   if (authLoading || status === 'loading') {
     return (
-      <div className="attendance-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+      <div className="attendance-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1.5rem' }}>
         <Loader2 className="animate-spin" size={48} color="var(--accent-primary)" />
-        <p style={{ marginTop: '1rem' }}>Processing your attendance...</p>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Verifying your attendance...</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-tertiary)', justifyContent: 'center' }}>
+            <Shield size={12} />
+            <span>Checking device & location</span>
+            <MapPin size={12} />
+          </div>
+        </div>
       </div>
     );
   }
 
+  const icon = () => {
+    if (status === 'success') return <CheckCircle size={64} color="var(--success)" />;
+    if (status === 'already-marked') return <CheckCircle size={64} color="var(--accent-primary)" />;
+    return <AlertCircle size={64} color="var(--danger)" />;
+  };
+
+  const bgColor = () => {
+    if (status === 'success') return 'rgba(16,185,129,0.1)';
+    if (status === 'already-marked') return 'rgba(99,102,241,0.1)';
+    return 'rgba(239,68,68,0.1)';
+  };
+
   return (
     <div className="attendance-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '1rem' }}>
-      <div className="qr-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center', padding: '3rem 2rem' }}>
-        {status === 'success' && <CheckCircle size={64} color="var(--success)" style={{ margin: '0 auto 1.5rem' }} />}
-        {status === 'already-marked' && <CheckCircle size={64} color="var(--accent-primary)" style={{ margin: '0 auto 1.5rem' }} />}
-        {status === 'error' && <AlertCircle size={64} color="var(--danger)" style={{ margin: '0 auto 1.5rem' }} />}
+      <div className="qr-card" style={{ maxWidth: '420px', width: '100%', textAlign: 'center', padding: '3rem 2rem' }}>
 
-        <h2 style={{ marginBottom: '1rem', fontSize: '1.75rem' }}>
-          {status === 'success' ? 'Success!' : status === 'already-marked' ? 'Already Done' : 'Attendance Error'}
-        </h2>
-        
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.6 }}>{message}</p>
+        <div style={{ width: 96, height: 96, borderRadius: '50%', background: bgColor(), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+          {icon()}
+        </div>
+
+        <h2 style={{ marginBottom: '0.75rem', fontSize: '1.75rem' }}>{message}</h2>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.7, fontSize: '0.95rem' }}>{detail}</p>
+
+        {/* Security badge */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem', padding: '0.5rem', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+          <Shield size={12} color="var(--accent-primary)" />
+          <span>Protected by device fingerprint + geolocation</span>
+        </div>
 
         {status === 'error' && !profile ? (
           <button className="add-btn" style={{ width: '100%' }} onClick={() => navigate('/login')}>

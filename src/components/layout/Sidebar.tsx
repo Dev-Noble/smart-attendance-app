@@ -10,7 +10,8 @@ import {
   GraduationCap,
   X,
   BookOpen,
-  FileText
+  FileText,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './Layout.css';
@@ -32,6 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { icon: <Users size={20} />, label: 'Students', path: '/students', roles: ['admin', 'lecturer'] },
     { icon: <FileText size={20} />, label: 'Biodata', path: '/biodata', roles: ['student'] },
     { icon: <Settings size={20} />, label: 'Settings', path: '/settings', roles: ['admin', 'lecturer', 'student'] },
+    { icon: <ShieldCheck size={20} />, label: 'Admin Panel', path: '/admin', roles: ['admin'] },
   ];
 
   const filteredItems = navItems.filter(item => 
