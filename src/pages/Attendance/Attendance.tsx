@@ -22,7 +22,7 @@ import { getLecturerCourses } from '../../services/courseService';
 import type { Course } from '../../services/courseService';
 import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
-import { getCurrentPosition, getDistanceMeters } from '../../utils/geolocation';
+import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
 import type { GeoCoords } from '../../utils/geolocation';
 import './Attendance.css';
 
@@ -235,11 +235,12 @@ const Attendance: React.FC = () => {
       if (sessionData.lecturerLocation) {
         try {
           const studentLocation = await getCurrentPosition();
-          const distance = getDistanceMeters(sessionData.lecturerLocation, studentLocation);
+          const effectiveDistance = getEffectiveDistance(sessionData.lecturerLocation, studentLocation);
           const radius = sessionData.allowedRadius ?? 100;
 
-          if (distance > radius) {
-            setSecurityError(`📍 You are ${Math.round(distance)}m away from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
+          if (effectiveDistance > radius) {
+            const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
+            setSecurityError(`📍 You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
             setAttendanceStatus('error');
             setSaving(false);
             return;

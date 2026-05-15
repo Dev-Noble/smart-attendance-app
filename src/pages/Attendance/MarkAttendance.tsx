@@ -6,7 +6,7 @@ import { db } from '../../services/firebase';
 import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, MapPin } from 'lucide-react';
 import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
-import { getCurrentPosition, getDistanceMeters } from '../../utils/geolocation';
+import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
 import './Attendance.css';
 
 type StatusType = 'loading' | 'success' | 'error' | 'already-marked';
@@ -94,13 +94,14 @@ const MarkAttendance: React.FC = () => {
         try {
           setDetail('Verifying your location...');
           const studentLocation = await getCurrentPosition();
-          const distance = getDistanceMeters(sessionData.lecturerLocation, studentLocation);
+          const effectiveDistance = getEffectiveDistance(sessionData.lecturerLocation, studentLocation);
           const radius = sessionData.allowedRadius ?? 100;
 
-          if (distance > radius) {
+          if (effectiveDistance > radius) {
+            const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
             setStatus('error');
             setMessage('Outside Classroom');
-            setDetail(`You are ${Math.round(distance)}m away from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
+            setDetail(`You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
             return;
           }
         } catch (geoErr: any) {

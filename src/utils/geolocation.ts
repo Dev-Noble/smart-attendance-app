@@ -5,6 +5,7 @@
 export interface GeoCoords {
   lat: number;
   lng: number;
+  accuracy?: number; // metres — how precise the reading is
 }
 
 /**
@@ -17,7 +18,11 @@ export const getCurrentPosition = (): Promise<GeoCoords> => {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => resolve({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy  // include accuracy
+      }),
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           reject(new Error('Location access was denied. Please enable location permissions to mark attendance.'));
@@ -36,7 +41,7 @@ export const getCurrentPosition = (): Promise<GeoCoords> => {
  * Calculates the distance in meters between two GPS coordinates using the Haversine formula.
  */
 export const getDistanceMeters = (a: GeoCoords, b: GeoCoords): number => {
-  const R = 6371000; // Earth radius in meters
+  const R = 6371000;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
   const dLat = toRad(b.lat - a.lat);
@@ -50,4 +55,16 @@ export const getDistanceMeters = (a: GeoCoords, b: GeoCoords): number => {
     Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinDLng * sinDLng;
 
   return R * 2 * Math.asin(Math.sqrt(h));
+};
+
+/**
+ * Returns the effective distance after subtracting both devices' accuracy margins.
+ * This prevents false "too far" errors caused by GPS imprecision.
+ * E.g. if actual distance is 60m but each device has ±30m accuracy,
+ * the effective distance is 0m — clearly within any reasonable classroom radius.
+ */
+export const getEffectiveDistance = (a: GeoCoords, b: GeoCoords): number => {
+  const rawDistance = getDistanceMeters(a, b);
+  const accuracyBuffer = (a.accuracy ?? 0) + (b.accuracy ?? 0);
+  return Math.max(0, rawDistance - accuracyBuffer);
 };
