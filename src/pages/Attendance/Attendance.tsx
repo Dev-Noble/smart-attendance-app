@@ -555,16 +555,16 @@ const Attendance: React.FC = () => {
                           <div className="form-group" style={{ textAlign: 'left' }}>
                             <label style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               <SlidersHorizontal size={14} />
-                              Allowed Radius: <strong>{allowedRadius}m</strong>
+                              Allowed Radius: <strong>{allowedRadius > 1000 ? `${(allowedRadius/1000).toFixed(1)}km` : `${allowedRadius}m`}</strong>
                             </label>
                             <input
-                              type="range" min={20} max={1000} step={10}
+                              type="range" min={20} max={5000} step={20}
                               value={allowedRadius}
                               onChange={(e) => setAllowedRadius(Number(e.target.value))}
                               style={{ width: '100%' }}
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-                              <span>20m</span><span>1km</span>
+                              <span>20m</span><span>5km</span>
                             </div>
                           </div>
 
