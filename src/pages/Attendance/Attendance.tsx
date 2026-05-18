@@ -10,7 +10,8 @@ import {
   Loader2,
   MapPin,
   Shield,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Fingerprint
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { doc, updateDoc, getDoc, onSnapshot, setDoc, arrayUnion } from 'firebase/firestore';
@@ -47,10 +48,18 @@ const Attendance: React.FC = () => {
 
   // Security state
   const [allowedRadius, setAllowedRadius] = useState(100);
+  const [isGeofenceEnabled, setIsGeofenceEnabled] = useState(true);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string>('');
+  const [currentCoords, setCurrentCoords] = useState<GeoCoords | null>(null);
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string>('');
   const [securityError, setSecurityError] = useState<string>('');
   const [attendanceStatus, setAttendanceStatus] = useState<'idle' | 'success' | 'error' | 'already-marked'>('idle');
+
+  // Scanner state
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const SCAN_DURATION = 2000; // 2 seconds
 
   useEffect(() => {
     fetchStudents();
@@ -84,8 +93,17 @@ const Attendance: React.FC = () => {
       loadLecturerCourses();
     }
 
+    if (profile?.role === 'student') {
+      loadDeviceFingerprint();
+    }
+
     return () => q();
   }, [profile]);
+
+  const loadDeviceFingerprint = async () => {
+    const fp = await getDeviceFingerprint();
+    setDeviceFingerprint(fp);
+  };
 
   const loadLecturerCourses = async () => {
     if (!profile) return;
@@ -130,6 +148,57 @@ const Attendance: React.FC = () => {
     return () => clearInterval(timer);
   }, [isSessionActive, timeLeft, profile]);
 
+  // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
+  useEffect(() => {
+    let scanInterval: any;
+    if (isScanning) {
+      const startTime = Date.now();
+      scanInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(100, (elapsed / SCAN_DURATION) * 100);
+        setScanProgress(progress);
+
+        if (progress >= 100) {
+          setIsScanning(false);
+          setScanProgress(0);
+          handleStudentScan(profile?.studentId || '');
+        }
+      }, 50);
+    } else {
+      setScanProgress(0);
+    }
+    return () => clearInterval(scanInterval);
+  }, [isScanning]);
+
+  const handleScanStart = (e: React.MouseEvent | React.TouchEvent) => {
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    if (saving || attendanceStatus !== 'idle') return;
+    setIsScanning(true);
+  };
+
+  const handleScanEnd = () => {
+    setIsScanning(false);
+  };
+
+  const refreshLecturerLocation = async () => {
+    setGettingLocation(true);
+    setLocationStatus('Fetching fresh classroom GPS...');
+    try {
+      const loc = await getCurrentPosition();
+      setCurrentCoords(loc);
+      setLocationStatus(`📍 GPS Locked: ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)} (±${Math.round(loc.accuracy || 0)}m)`);
+      if ((loc.accuracy || 0) > 100) {
+        setLocationStatus(prev => prev + ' - ⚠️ Low accuracy! Try moving near a window.');
+      }
+    } catch (err: any) {
+      setLocationStatus(`❌ Location failed: ${err.message}`);
+    } finally {
+      setGettingLocation(false);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -165,7 +234,7 @@ const Attendance: React.FC = () => {
         profile.uid,
         selectedCourse.code,
         selectedCourse.title,
-        lecturerLocation,
+        isGeofenceEnabled ? (currentCoords || undefined) : undefined,
         allowedRadius
       );
       await setDoc(doc(db, 'system', 'status'), { activeSessionId: newSessionId }, { merge: true });
@@ -232,6 +301,9 @@ const Attendance: React.FC = () => {
       }
 
       // ── Check 3: Geolocation Radius ───────────────────────────────────────
+      // Artificial delay for UX visibility
+      await new Promise(resolve => setTimeout(resolve, 1200));
+
       if (sessionData.lecturerLocation) {
         try {
           const studentLocation = await getCurrentPosition();
@@ -315,13 +387,27 @@ const Attendance: React.FC = () => {
                   <div style={{ textAlign: 'center' }}>
                     <CheckCircle size={56} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
                     <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Attendance Recorded!</h3>
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>Your presence has been successfully logged.</p>
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Your presence has been successfully logged.</p>
+                    
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                      <span>Verified Device ID:</span>
+                      <code style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: 'var(--success)' }}>
+                        {deviceFingerprint.substring(0, 16)}...
+                      </code>
+                    </div>
                   </div>
                 ) : attendanceStatus === 'already-marked' ? (
                   <div style={{ textAlign: 'center' }}>
                     <CheckCircle size={56} color="var(--accent-primary)" style={{ margin: '0 auto 1rem' }} />
                     <h3 style={{ marginBottom: '0.5rem' }}>Already Marked</h3>
-                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>You've already marked attendance for this session.</p>
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>You've already marked attendance for this session.</p>
+                    
+                    <div style={{ padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                      <span>Verified Device ID:</span>
+                      <code style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                        {deviceFingerprint.substring(0, 16)}...
+                      </code>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -330,20 +416,59 @@ const Attendance: React.FC = () => {
                         {securityError}
                       </div>
                     )}
-                    <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: '10px', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                      <Shield size={14} color="var(--accent-primary)" />
-                      <span>Your device & location will be verified</span>
+                    <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-tertiary)' }}>
+                        <Shield size={14} color="var(--accent-primary)" />
+                        <span>Security Check Enabled</span>
+                      </div>
+                      <div style={{ color: 'var(--text-tertiary)', opacity: 0.8, fontSize: '0.75rem', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <span>Device Signature:</span>
+                        <code style={{ background: 'var(--bg-secondary)', padding: '0.1rem 0.3rem', borderRadius: '4px', fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                          {deviceFingerprint ? `${deviceFingerprint.substring(0, 12)}...` : 'Generating...'}
+                        </code>
+                      </div>
                     </div>
-                    <button
-                      className="start-btn"
-                      disabled={saving}
-                      style={{ width: '100%', height: '60px', borderRadius: '15px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                      onClick={() => handleStudentScan(profile.studentId || '')}
-                    >
-                      {saving ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle size={24} />}
-                      {saving ? 'Verifying...' : 'Confirm My Attendance'}
-                    </button>
-                    <p className="qr-hint" style={{ marginTop: '1.5rem' }}>Session is active. Click above to register your presence.</p>
+
+                    {/* Interactive Fingerprint Scanner */}
+                    {!saving && (
+                      <div style={{ textAlign: 'center' }}>
+                        <div 
+                          className={`scanner-container ${isScanning ? 'active' : ''}`}
+                          onMouseDown={handleScanStart}
+                          onMouseUp={handleScanEnd}
+                          onMouseLeave={handleScanEnd}
+                          onTouchStart={handleScanStart}
+                          onTouchEnd={handleScanEnd}
+                        >
+                          <div className="scanner-circle"></div>
+                          <svg className="progress-ring">
+                            <circle
+                              className="progress-ring-circle"
+                              r="60"
+                              cx="65"
+                              cy="65"
+                              style={{ 
+                                strokeDashoffset: 377 - (377 * scanProgress) / 100 
+                              }}
+                            />
+                          </svg>
+                          <div className="scan-line"></div>
+                          <Fingerprint className="fingerprint-icon" size={60} />
+                        </div>
+                        <span className="scanner-label">
+                          {isScanning ? 'Scanning Fingerprint...' : 'Hold to Scan Fingerprint'}
+                        </span>
+                      </div>
+                    )}
+
+                    {saving && (
+                      <div style={{ padding: '2rem 0', textAlign: 'center' }}>
+                        <Loader2 className="animate-spin" size={48} color="var(--accent-primary)" style={{ margin: '0 auto 1rem' }} />
+                        <p style={{ fontWeight: 600 }}>Verifying Identity...</p>
+                      </div>
+                    )}
+                    
+                    <p className="qr-hint">Hold your finger on the sensor above to verify and mark your attendance.</p>
                   </>
                 )}
               </>
@@ -395,44 +520,69 @@ const Attendance: React.FC = () => {
                       </div>
 
                       {/* Radius Slider */}
-                      <div className="form-group" style={{ textAlign: 'left' }}>
-                        <label style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <SlidersHorizontal size={14} />
-                          Allowed Radius: <strong>{allowedRadius}m</strong>
-                        </label>
-                        <input
-                          type="range" min={20} max={500} step={10}
-                          value={allowedRadius}
-                          onChange={(e) => setAllowedRadius(Number(e.target.value))}
-                          style={{ width: '100%' }}
+                      {/* Geofence Toggle */}
+                      <div className="form-group" style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                        <input 
+                          type="checkbox" 
+                          id="geofence-toggle"
+                          checked={isGeofenceEnabled}
+                          onChange={(e) => setIsGeofenceEnabled(e.target.checked)}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-                          <span>20m (tight)</span><span>500m (wide)</span>
-                        </div>
+                        <label htmlFor="geofence-toggle" style={{ fontSize: '0.875rem', cursor: 'pointer', fontWeight: 500 }}>
+                          Enable Location Check (Geofencing)
+                        </label>
                       </div>
 
-                      {/* Location status */}
-                      {locationStatus && (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', padding: '0.5rem 0.75rem', background: 'var(--bg-tertiary)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <MapPin size={12} />
-                          {locationStatus}
-                        </div>
+                      {isGeofenceEnabled && (
+                        <>
+                          {/* Radius Slider */}
+                          <div className="form-group" style={{ textAlign: 'left' }}>
+                            <label style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <SlidersHorizontal size={14} />
+                              Allowed Radius: <strong>{allowedRadius}m</strong>
+                            </label>
+                            <input
+                              type="range" min={20} max={1000} step={10}
+                              value={allowedRadius}
+                              onChange={(e) => setAllowedRadius(Number(e.target.value))}
+                              style={{ width: '100%' }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                              <span>20m</span><span>1km</span>
+                            </div>
+                          </div>
+
+                          {/* Location status */}
+                          <div style={{ padding: '0.75rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                              <MapPin size={12} />
+                              {locationStatus || 'Location not captured yet.'}
+                            </div>
+                            <button 
+                              className="btn-secondary" 
+                              style={{ width: '100%', fontSize: '0.75rem', padding: '0.4rem' }}
+                              onClick={refreshLecturerLocation}
+                              disabled={gettingLocation}
+                            >
+                              {gettingLocation ? <Loader2 size={14} className="animate-spin" /> : 'Get Classroom GPS'}
+                            </button>
+                          </div>
+                        </>
                       )}
 
                       <button
                         className="start-btn"
                         onClick={startSession}
-                        disabled={lecturerCourses.length === 0 || gettingLocation}
+                        disabled={lecturerCourses.length === 0 || (isGeofenceEnabled && !currentCoords && gettingLocation)}
                       >
-                        {gettingLocation
-                          ? <><Loader2 size={20} className="animate-spin" /> Getting location...</>
-                          : <><Play size={20} fill="currentColor" /> Start Session</>
-                        }
+                        <Play size={20} fill="currentColor" />
+                        Start Session
                       </button>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-tertiary)', justifyContent: 'center' }}>
                         <Shield size={12} color="var(--accent-primary)" />
-                        Device fingerprint + geolocation checks enabled
+                        Device fingerprint {isGeofenceEnabled ? '+ geolocation' : ''} enabled
                       </div>
                     </div>
                   ) : (
