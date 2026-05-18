@@ -22,6 +22,7 @@ export interface Student {
   lastSeen: any;
   avatar?: string;
   courses?: string[]; // Array of course IDs the student is enrolled in
+  registeredFingerprint?: string; // Stored hardware fingerprint for attendance
 }
 
 export const getStudents = async () => {
@@ -58,7 +59,7 @@ export const getStudentByStudentId = async (studentId: string) => {
   return { id: doc.id, ...doc.data() } as Student;
 };
 
-export const syncStudentBiodata = async (email: string, name: string, studentId: string) => {
+export const syncStudentBiodata = async (email: string, name: string, studentId: string, registeredFingerprint?: string) => {
   // Check if student exists
   const q = query(collection(db, 'students'), where('email', '==', email));
   const querySnapshot = await getDocs(q);
@@ -66,14 +67,18 @@ export const syncStudentBiodata = async (email: string, name: string, studentId:
   if (!querySnapshot.empty) {
     // Update existing
     const studentDoc = querySnapshot.docs[0];
-    await updateDoc(doc(db, 'students', studentDoc.id), {
+    const updatePayload: any = {
       name,
       studentId,
       lastSeen: serverTimestamp()
-    });
+    };
+    if (registeredFingerprint) {
+      updatePayload.registeredFingerprint = registeredFingerprint;
+    }
+    await updateDoc(doc(db, 'students', studentDoc.id), updatePayload);
   } else {
     // Create new
-    await addDoc(collection(db, 'students'), {
+    const newStudent: any = {
       name,
       email,
       studentId,
@@ -81,6 +86,10 @@ export const syncStudentBiodata = async (email: string, name: string, studentId:
       status: 'active',
       courses: [],
       lastSeen: serverTimestamp()
-    });
+    };
+    if (registeredFingerprint) {
+      newStudent.registeredFingerprint = registeredFingerprint;
+    }
+    await addDoc(collection(db, 'students'), newStudent);
   }
 };

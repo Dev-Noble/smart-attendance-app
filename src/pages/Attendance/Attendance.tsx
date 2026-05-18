@@ -287,11 +287,30 @@ const Attendance: React.FC = () => {
         return;
       }
 
-      // ── Check 2: Device Fingerprint ───────────────────────────────────────
-      const fingerprint = await getDeviceFingerprint();
-      const usedFingerprints: string[] = sessionData.deviceFingerprints || [];
-      if (usedFingerprints.includes(fingerprint)) {
-        setSecurityError('🚫 This device has already been used to mark attendance in this session. Attendance cannot be marked for multiple accounts from the same device.');
+      // ── Check 1: Student is actually registered ─────────────────────────────
+      if (!profile.studentId) {
+        setSecurityError('You must complete your Biodata and register your Student ID first.');
+        setSaving(false);
+        return;
+      }
+
+      // ── Check 2: Primary Device Match ───────────────────────────────────────
+      if (!profile.registeredFingerprint) {
+        setSecurityError('You have not registered a primary device. Please update your Biodata.');
+        setSaving(false);
+        return;
+      }
+
+      if (profile.registeredFingerprint !== deviceFingerprint) {
+        setSecurityError('Unrecognized Device: You can only mark attendance from your registered primary device.');
+        setSaving(false);
+        return;
+      }
+
+      // ── Check 3: One scan per device (Extra Safety) ─────────────────────────
+      if (sessionData.deviceFingerprints?.includes(deviceFingerprint) && 
+          !sessionData.studentsPresent?.includes(profile.studentId)) {
+        setSecurityError('Security Alert: This device has already been used to mark attendance for another student.');
         setAttendanceStatus('error');
         setSaving(false);
         return;
@@ -431,11 +450,10 @@ const Attendance: React.FC = () => {
                       <div style={{ textAlign: 'center' }}>
                         <div 
                           className={`scanner-container ${isScanning ? 'active' : ''}`}
-                          onMouseDown={handleScanStart}
-                          onMouseUp={handleScanEnd}
-                          onMouseLeave={handleScanEnd}
-                          onTouchStart={handleScanStart}
-                          onTouchEnd={handleScanEnd}
+                          onPointerDown={handleScanStart}
+                          onPointerUp={handleScanEnd}
+                          onPointerCancel={handleScanEnd}
+                          onPointerLeave={handleScanEnd}
                         >
                           <div className="scanner-circle"></div>
                           <svg className="progress-ring">

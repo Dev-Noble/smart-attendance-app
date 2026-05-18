@@ -6,13 +6,17 @@ import {
   Phone,
   MapPin,
   Save,
-  Loader2
+  Loader2,
+  Fingerprint,
+  Shield,
+  CheckCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logActivity } from '../../services/activityService';
 import { syncStudentBiodata } from '../../services/studentService';
+import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
 import './Biodata.css';
 
 const Biodata: React.FC = () => {
@@ -26,6 +30,13 @@ const Biodata: React.FC = () => {
     address: ''
   });
 
+  const [registeredFingerprint, setRegisteredFingerprint] = useState<string>('');
+  
+  // Scanner state
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const SCAN_DURATION = 2000; // 2 seconds
+
   useEffect(() => {
     if (profile) {
       setFormData({
@@ -35,14 +46,58 @@ const Biodata: React.FC = () => {
         phone: (profile as any).phone || '',
         address: (profile as any).address || ''
       });
+      if ((profile as any).registeredFingerprint) {
+        setRegisteredFingerprint((profile as any).registeredFingerprint);
+      }
     }
   }, [profile]);
+
+  // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
+  useEffect(() => {
+    let scanInterval: any;
+    if (isScanning) {
+      const startTime = Date.now();
+      scanInterval = setInterval(async () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(100, (elapsed / SCAN_DURATION) * 100);
+        setScanProgress(progress);
+
+        if (progress >= 100) {
+          setIsScanning(false);
+          setScanProgress(0);
+          try {
+            const fp = await getDeviceFingerprint();
+            setRegisteredFingerprint(fp);
+          } catch (err) {
+            console.error("Failed to generate fingerprint:", err);
+          }
+        }
+      }, 50);
+    } else {
+      setScanProgress(0);
+    }
+    return () => clearInterval(scanInterval);
+  }, [isScanning]);
+
+  const handleScanStart = (e: React.PointerEvent) => {
+    e.preventDefault(); // Prevent text selection/drag behavior
+    if (saving || registeredFingerprint) return;
+    setIsScanning(true);
+  };
+
+  const handleScanEnd = () => {
+    setIsScanning(false);
+  };
 
   const handleSave = async () => {
     if (!profile) return;
     
     if (!formData.studentId) {
       alert("Student ID is required.");
+      return;
+    }
+    if (!registeredFingerprint) {
+      alert("Please register your Primary Device Fingerprint.");
       return;
     }
 
@@ -55,11 +110,12 @@ const Biodata: React.FC = () => {
         studentId: formData.studentId,
         major: formData.major,
         phone: formData.phone,
-        address: formData.address
+        address: formData.address,
+        registeredFingerprint
       });
 
       // 2. Sync to the students collection for attendance verification
-      await syncStudentBiodata(profile.email, formData.name, formData.studentId);
+      await syncStudentBiodata(profile.email, formData.name, formData.studentId, registeredFingerprint);
 
       await logActivity(profile.uid, profile.name, 'Updated Biodata', 'Completed student registration profile', 'student');
       alert('Biodata updated successfully!');
@@ -164,6 +220,63 @@ const Biodata: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="biodata-card" style={{ background: 'var(--bg-secondary)', borderRadius: '15px', padding: '2rem', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginTop: '2rem' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', fontSize: '1.25rem' }}>
+          <Shield size={20} /> Device Registration <span style={{color: 'red'}}>*</span>
+        </h3>
+        
+        <p style={{ color: 'var(--text-tertiary)', marginBottom: '2rem', lineHeight: 1.6 }}>
+          Register your primary device. Attendance marking will <strong>only</strong> be allowed from this exact browser and device combination to prevent impersonation.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
+          {registeredFingerprint ? (
+            <div style={{ textAlign: 'center' }}>
+              <CheckCircle size={56} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
+              <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Device Registered</h3>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Your primary device fingerprint is secured.</p>
+              <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'inline-block' }}>
+                <span>Signature:</span>
+                <code style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: 'var(--success)' }}>
+                  {registeredFingerprint.substring(0, 16)}...
+                </code>
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', touchAction: 'none' }}>
+              <div 
+                className={`scanner-container ${isScanning ? 'active' : ''}`}
+                onPointerDown={handleScanStart}
+                onPointerUp={handleScanEnd}
+                onPointerCancel={handleScanEnd}
+                onPointerLeave={handleScanEnd}
+                style={{ width: '100px', height: '100px', margin: '0 auto 1.5rem' }}
+              >
+                <div className="scanner-circle"></div>
+                <svg className="progress-ring" style={{ width: '110px', height: '110px', top: '-5px', left: '-5px' }}>
+                  <circle
+                    className="progress-ring-circle"
+                    r="50"
+                    cx="55"
+                    cy="55"
+                    style={{ 
+                      strokeDasharray: 314, // 2 * PI * 50
+                      strokeDashoffset: 314 - (314 * scanProgress) / 100 
+                    }}
+                  />
+                </svg>
+                <div className="scan-line"></div>
+                <Fingerprint className="fingerprint-icon" size={50} />
+              </div>
+              <span className="scanner-label" style={{ fontWeight: 600, color: isScanning ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+                {isScanning ? 'Generating Fingerprint...' : 'Hold to Register Device'}
+              </span>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>Hold until the circle is complete</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
