@@ -171,9 +171,6 @@ const Attendance: React.FC = () => {
   }, [isScanning]);
 
   const handleScanStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (e.cancelable) {
-      e.preventDefault();
-    }
     if (saving || attendanceStatus !== 'idle') return;
     setIsScanning(true);
   };

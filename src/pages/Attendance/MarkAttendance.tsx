@@ -82,9 +82,6 @@ const MarkAttendance: React.FC = () => {
   }, [isScanning]);
 
   const handleScanStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (e.cancelable) {
-      e.preventDefault();
-    }
     if (status !== 'ready-to-scan' || !deviceFingerprint) return;
     setIsScanning(true);
   };
