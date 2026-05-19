@@ -162,11 +162,19 @@ const MarkAttendance: React.FC = () => {
           const radius = sessionData.allowedRadius ?? 100;
 
           if (effectiveDistance > radius) {
-            const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
-            setStatus('error');
-            setMessage('Outside Classroom');
-            setDetail(`You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
-            return;
+            const lecturerAccuracy = sessionData.lecturerLocation.accuracy ?? 0;
+            const studentAccuracy = studentLocation.accuracy ?? 0;
+
+            // If either device reports low precision (> 80m accuracy), bypass geofence check to prevent false negatives
+            if (lecturerAccuracy > 80 || studentAccuracy > 80) {
+              console.warn("Bypassing geofence check due to low GPS precision:", { lecturerAccuracy, studentAccuracy });
+            } else {
+              const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
+              setStatus('error');
+              setMessage('Outside Classroom');
+              setDetail(`You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
+              return;
+            }
           }
         } catch (geoErr: any) {
           setStatus('error');

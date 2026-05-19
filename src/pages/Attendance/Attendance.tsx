@@ -218,6 +218,7 @@ const Attendance: React.FC = () => {
 
     try {
       lecturerLocation = await getCurrentPosition();
+      setCurrentCoords(lecturerLocation); // Fix: update state so it can be reused
       setLocationStatus(`📍 Location captured (${lecturerLocation.lat.toFixed(4)}, ${lecturerLocation.lng.toFixed(4)})`);
     } catch (err: any) {
       // Location is optional for lecturer — warn but allow session to start
@@ -231,7 +232,7 @@ const Attendance: React.FC = () => {
         profile.uid,
         selectedCourse.code,
         selectedCourse.title,
-        isGeofenceEnabled ? (currentCoords || undefined) : undefined,
+        isGeofenceEnabled ? (lecturerLocation || currentCoords || undefined) : undefined,
         allowedRadius
       );
       await setDoc(doc(db, 'system', 'status'), { activeSessionId: newSessionId }, { merge: true });
@@ -327,11 +328,19 @@ const Attendance: React.FC = () => {
           const radius = sessionData.allowedRadius ?? 100;
 
           if (effectiveDistance > radius) {
-            const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
-            setSecurityError(`📍 You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
-            setAttendanceStatus('error');
-            setSaving(false);
-            return;
+            const lecturerAccuracy = sessionData.lecturerLocation.accuracy ?? 0;
+            const studentAccuracy = studentLocation.accuracy ?? 0;
+
+            // If either device reports low precision (> 80m accuracy), bypass geofence check to prevent false negatives
+            if (lecturerAccuracy > 80 || studentAccuracy > 80) {
+              console.warn("Bypassing geofence check due to low GPS precision:", { lecturerAccuracy, studentAccuracy });
+            } else {
+              const rawDistance = Math.round(getDistanceMeters(sessionData.lecturerLocation, studentLocation));
+              setSecurityError(`📍 You appear to be ~${rawDistance}m from the classroom. You must be within ${radius}m to mark attendance. Please move closer and try again.`);
+              setAttendanceStatus('error');
+              setSaving(false);
+              return;
+            }
           }
         } catch (geoErr: any) {
           setSecurityError(`📍 ${geoErr.message}`);
