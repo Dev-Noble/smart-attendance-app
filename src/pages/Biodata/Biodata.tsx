@@ -54,6 +54,8 @@ const Biodata: React.FC = () => {
     }
   }, [profile]);
 
+  const enrollmentTriggered = React.useRef(false);
+
   // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
   useEffect(() => {
     let scanInterval: any;
@@ -68,27 +70,33 @@ const Biodata: React.FC = () => {
           clearInterval(scanInterval);
           setIsScanning(false);
           setScanProgress(0);
-          setIsEnrolling(true);
-          try {
-            // Hardware WebAuthn only — no browser-signature fallback
-            const email = (profile as any).email || profile?.name || '';
-            const result = await registerBiometrics(formData.studentId, formData.name, email);
-            // Store the full token: "webauthn:<credentialId>:<email>"
-            setRegisteredFingerprint(result.token);
-            alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
-          } catch (err: any) {
-            console.error('Biometric registration failed:', err);
-            alert(`Registration failed: ${err.message || err}`);
-          } finally {
-            setIsEnrolling(false);
+          
+          if (!enrollmentTriggered.current) {
+            enrollmentTriggered.current = true;
+            setIsEnrolling(true);
+            try {
+              // Hardware WebAuthn only — no browser-signature fallback
+              const email = (profile as any).email || profile?.name || '';
+              const result = await registerBiometrics(formData.studentId, formData.name, email);
+              // Store the full token: "webauthn:<credentialId>:<email>"
+              setRegisteredFingerprint(result.token);
+              alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
+            } catch (err: any) {
+              console.error('Biometric registration failed:', err);
+              alert(`Registration failed: ${err.message || err}`);
+            } finally {
+              setIsEnrolling(false);
+              enrollmentTriggered.current = false;
+            }
           }
         }
       }, 50);
-    } else {
+    } else if (!isEnrolling) {
       setScanProgress(0);
+      enrollmentTriggered.current = false;
     }
     return () => clearInterval(scanInterval);
-  }, [isScanning, isEnrolling, formData]);
+  }, [isScanning, isEnrolling, formData, profile]);
 
   const handleScanStart = (e: React.PointerEvent) => {
     e.preventDefault(); // Prevent text selection/drag behavior
