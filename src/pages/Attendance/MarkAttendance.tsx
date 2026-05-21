@@ -6,6 +6,7 @@ import { db } from '../../services/firebase';
 import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, Fingerprint } from 'lucide-react';
 import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
+import { verifyBiometrics } from '../../utils/webauthn';
 import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
 import './Attendance.css';
 
@@ -135,11 +136,20 @@ const MarkAttendance: React.FC = () => {
         return;
       }
 
-      if (fingerprint !== registeredFingerprint) {
-        setStatus('error');
-        setMessage('Unrecognized Device');
-        setDetail('You can only mark attendance from your registered primary device to prevent impersonation.');
-        return;
+      const isWebAuthn = registeredFingerprint.startsWith('webauthn:');
+      const isLegacyPrefixed = registeredFingerprint.startsWith('legacy:');
+      const targetFingerprint = isWebAuthn 
+        ? registeredFingerprint.substring('webauthn:'.length)
+        : (isLegacyPrefixed ? registeredFingerprint.substring('legacy:'.length) : registeredFingerprint);
+
+      // Verify immediate signature match for legacy enrollments
+      if (!isWebAuthn) {
+        if (fingerprint !== targetFingerprint) {
+          setStatus('error');
+          setMessage('Unrecognized Device');
+          setDetail('You can only mark attendance from your registered primary device to prevent impersonation.');
+          return;
+        }
       }
 
       // ── Check 2.1: One scan per device (Extra Safety) ──────────────────────
@@ -204,6 +214,20 @@ const MarkAttendance: React.FC = () => {
     setStatus('loading'); // Show loader during write
     
     try {
+      const registeredFingerprint = (profile as any).registeredFingerprint || '';
+      const isWebAuthn = registeredFingerprint.startsWith('webauthn:');
+      
+      if (isWebAuthn) {
+        const targetFingerprint = registeredFingerprint.substring('webauthn:'.length);
+        const verified = await verifyBiometrics(targetFingerprint);
+        if (!verified) {
+          setStatus('error');
+          setMessage('Biometric Failed');
+          setDetail('Native biometric verification was denied or timed out. Please scan the correct finger.');
+          return;
+        }
+      }
+
       await updateDoc(sessionRef, {
         studentsPresent: arrayUnion(profile.studentId),
         deviceFingerprints: arrayUnion(fingerprintToSave)

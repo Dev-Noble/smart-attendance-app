@@ -17,6 +17,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { logActivity } from '../../services/activityService';
 import { syncStudentBiodata } from '../../services/studentService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
+import { isWebAuthnSupported, registerBiometrics } from '../../utils/webauthn';
 import './Biodata.css';
 
 const Biodata: React.FC = () => {
@@ -66,10 +67,21 @@ const Biodata: React.FC = () => {
           setIsScanning(false);
           setScanProgress(0);
           try {
-            const fp = await getDeviceFingerprint();
-            setRegisteredFingerprint(fp);
-          } catch (err) {
-            console.error("Failed to generate fingerprint:", err);
+            const supported = await isWebAuthnSupported();
+            if (supported) {
+              // Trigger hardware biometric enrollment
+              const result = await registerBiometrics(formData.studentId, formData.name);
+              setRegisteredFingerprint(`webauthn:${result.credentialId}`);
+              alert("Native hardware biometrics (Touch ID / Face ID) enrolled successfully!");
+            } else {
+              // Fallback to legacy browser fingerprint
+              const fp = await getDeviceFingerprint();
+              setRegisteredFingerprint(`legacy:${fp}`);
+              alert("No native biometrics supported. Enrolled using browser signature fallback.");
+            }
+          } catch (err: any) {
+            console.error("Biometric registration failed:", err);
+            alert(`Biometric registration failed: ${err.message || err}`);
           }
         }
       }, 50);
@@ -77,11 +89,16 @@ const Biodata: React.FC = () => {
       setScanProgress(0);
     }
     return () => clearInterval(scanInterval);
-  }, [isScanning]);
+  }, [isScanning, formData]);
 
   const handleScanStart = (e: React.PointerEvent) => {
     e.preventDefault(); // Prevent text selection/drag behavior
     if (saving || registeredFingerprint) return;
+
+    if (!formData.name || !formData.studentId) {
+      alert("Please fill in your Full Name and Student ID first so we can enroll your biometric credentials.");
+      return;
+    }
     setIsScanning(true);
   };
 

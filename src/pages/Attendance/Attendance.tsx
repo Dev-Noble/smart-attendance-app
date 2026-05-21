@@ -23,6 +23,7 @@ import { getLecturerCourses } from '../../services/courseService';
 import type { Course } from '../../services/courseService';
 import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
+import { verifyBiometrics } from '../../utils/webauthn';
 import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
 import type { GeoCoords } from '../../utils/geolocation';
 import './Attendance.css';
@@ -310,10 +311,28 @@ const Attendance: React.FC = () => {
         return;
       }
 
-      if (studentProfile.registeredFingerprint !== deviceFingerprint) {
-        setSecurityError('Unrecognized Device: You can only mark attendance from your registered primary device.');
-        setSaving(false);
-        return;
+      const regFingerprint = studentProfile.registeredFingerprint;
+      const isWebAuthn = regFingerprint.startsWith('webauthn:');
+      const isLegacyPrefixed = regFingerprint.startsWith('legacy:');
+      const targetFingerprint = isWebAuthn 
+        ? regFingerprint.substring('webauthn:'.length)
+        : (isLegacyPrefixed ? regFingerprint.substring('legacy:'.length) : regFingerprint);
+
+      if (isWebAuthn) {
+        // Trigger actual native hardware biometrics (Touch ID / Face ID)
+        const verified = await verifyBiometrics(targetFingerprint);
+        if (!verified) {
+          setSecurityError('Biometric Verification Failed: Access denied or wrong finger scanned.');
+          setSaving(false);
+          return;
+        }
+      } else {
+        // Fallback to legacy device-signature match
+        if (targetFingerprint !== deviceFingerprint) {
+          setSecurityError('Unrecognized Device: You can only mark attendance from your registered primary device.');
+          setSaving(false);
+          return;
+        }
       }
 
       // ── Check 3: One scan per device (Extra Safety) ─────────────────────────
