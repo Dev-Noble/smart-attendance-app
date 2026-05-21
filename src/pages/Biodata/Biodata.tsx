@@ -92,7 +92,7 @@ const Biodata: React.FC = () => {
 
   const handleScanStart = (e: React.PointerEvent) => {
     e.preventDefault(); // Prevent text selection/drag behavior
-    if (saving || registeredFingerprint || isScanning || isEnrolling) return;
+    if (saving || isScanning || isEnrolling) return;
 
     if (!formData.name || !formData.studentId) {
       alert("Please fill in your Full Name and Student ID first so we can enroll your biometric credentials.");
@@ -248,70 +248,53 @@ const Biodata: React.FC = () => {
           Register your primary device. Attendance marking will <strong>only</strong> be allowed from this exact browser and device combination to prevent impersonation.
         </p>
 
+        {/* Current registration status */}
+        {registeredFingerprint && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.5rem', background: 'var(--bg-tertiary)', borderRadius: '10px', marginBottom: '1.5rem' }}>
+            <CheckCircle size={24} color="var(--success)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ color: 'var(--success)', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>Device Currently Registered</p>
+              <code style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-tertiary)', wordBreak: 'break-all' }}>
+                {registeredFingerprint.substring(0, 24)}...
+              </code>
+            </div>
+          </div>
+        )}
+
+        {/* Scanner — always visible */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
-          {registeredFingerprint ? (
-            <div style={{ textAlign: 'center' }}>
-              <CheckCircle size={56} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
-              <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Device Registered</h3>
-              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Your primary device fingerprint is secured.</p>
-              <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '1.5rem' }}>
-                <span>Signature:</span>
-                <code style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: 'var(--success)' }}>
-                  {registeredFingerprint.substring(0, 16)}...
-                </code>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setRegisteredFingerprint('')}
-                  style={{
-                    background: 'var(--bg-primary)',
-                    border: '1px solid var(--border-color)',
-                    color: 'var(--text-secondary)',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    transition: 'all 0.2s'
+          <div style={{ textAlign: 'center', touchAction: 'none' }}>
+            <div 
+              className={`scanner-container ${isScanning ? 'active' : ''}`}
+              onPointerDown={handleScanStart}
+              onPointerUp={handleScanEnd}
+              onPointerCancel={handleScanEnd}
+              onPointerLeave={handleScanEnd}
+              style={{ width: '100px', height: '100px', margin: '0 auto 1.5rem', cursor: (saving || isScanning || isEnrolling) ? 'not-allowed' : 'pointer' }}
+            >
+              <div className="scanner-circle"></div>
+              <svg className="progress-ring" style={{ width: '110px', height: '110px', top: '-5px', left: '-5px' }}>
+                <circle
+                  className="progress-ring-circle"
+                  r="50"
+                  cx="55"
+                  cy="55"
+                  style={{ 
+                    strokeDasharray: 314,
+                    strokeDashoffset: 314 - (314 * scanProgress) / 100 
                   }}
-                >
-                  🔄 Register New Device / Re-register
-                </button>
-              </div>
+                />
+              </svg>
+              <div className="scan-line"></div>
+              <Fingerprint className="fingerprint-icon" size={50} />
             </div>
-          ) : (
-            <div style={{ textAlign: 'center', touchAction: 'none' }}>
-              <div 
-                className={`scanner-container ${isScanning ? 'active' : ''}`}
-                onPointerDown={handleScanStart}
-                onPointerUp={handleScanEnd}
-                onPointerCancel={handleScanEnd}
-                onPointerLeave={handleScanEnd}
-                style={{ width: '100px', height: '100px', margin: '0 auto 1.5rem' }}
-              >
-                <div className="scanner-circle"></div>
-                <svg className="progress-ring" style={{ width: '110px', height: '110px', top: '-5px', left: '-5px' }}>
-                  <circle
-                    className="progress-ring-circle"
-                    r="50"
-                    cx="55"
-                    cy="55"
-                    style={{ 
-                      strokeDasharray: 314, // 2 * PI * 50
-                      strokeDashoffset: 314 - (314 * scanProgress) / 100 
-                    }}
-                  />
-                </svg>
-                <div className="scan-line"></div>
-                <Fingerprint className="fingerprint-icon" size={50} />
-              </div>
-              <span className="scanner-label" style={{ fontWeight: 600, color: isScanning ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
-                {isScanning ? 'Generating Fingerprint...' : 'Hold to Register Device'}
-              </span>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>Hold until the circle is complete</p>
-            </div>
-          )}
+            <span className="scanner-label" style={{ fontWeight: 600, color: isScanning ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+              {isEnrolling ? 'Waiting for biometric scan...' : isScanning ? 'Generating Fingerprint...' : registeredFingerprint ? 'Hold to Re-register Device' : 'Hold to Register Device'}
+            </span>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>
+              {registeredFingerprint ? 'Hold scanner to overwrite with a new biometric credential' : 'Hold until the circle is complete'}
+            </p>
+          </div>
         </div>
       </div>
     </div>
