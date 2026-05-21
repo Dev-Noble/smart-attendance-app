@@ -18,6 +18,27 @@ export const base64ToBuffer = (base64: string): ArrayBuffer => {
 };
 
 /**
+ * Checks if the hostname is an IP address.
+ * WebAuthn forbids IP addresses in the rp.id field.
+ */
+export const isIpAddress = (hostname: string): boolean => {
+  const ipv4Pattern = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+  return ipv4Pattern.test(hostname) || (hostname.includes(':') && !hostname.includes('localhost'));
+};
+
+/**
+ * Resolves the Relying Party ID (RP ID).
+ * If the current page is accessed via loopback IP, we map it to 'localhost'.
+ */
+export const getRelyingPartyId = (): string => {
+  const hostname = window.location.hostname;
+  if (hostname === '127.0.0.1' || hostname === '[::1]') {
+    return 'localhost';
+  }
+  return hostname;
+};
+
+/**
  * Checks if native hardware biometrics (platform authenticators)
  * are supported by this browser and device.
  */
@@ -27,6 +48,13 @@ export const isWebAuthnSupported = async (): Promise<boolean> => {
     console.warn("[WebAuthn] window.PublicKeyCredential is not defined");
     return false;
   }
+  
+  const hostname = window.location.hostname;
+  if (isIpAddress(hostname) && hostname !== '127.0.0.1' && hostname !== '[::1]') {
+    console.warn("[WebAuthn] Accessing via IP address. WebAuthn requires a domain name or localhost.");
+    return false;
+  }
+
   try {
     const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
     console.log("[WebAuthn] Platform authenticator available:", available);
@@ -49,7 +77,13 @@ export const registerBiometrics = async (
   
   const supported = await isWebAuthnSupported();
   if (!supported) {
-    console.error("[WebAuthn] Hardware biometrics not supported on this device/browser.");
+    const hostname = window.location.hostname;
+    if (isIpAddress(hostname)) {
+      throw new Error(
+        'WebAuthn does not support raw IP addresses. ' +
+        'Please access this web application using localhost (http://localhost:5173) or a domain name.'
+      );
+    }
     throw new Error(
       'Your device does not support hardware biometrics (Touch ID / Face ID / Windows Hello). ' +
       'Please use a device with biometric hardware to register.'
@@ -59,16 +93,16 @@ export const registerBiometrics = async (
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userIdentity = `${email}::${studentId}`;
   const userId = new TextEncoder().encode(userIdentity);
+  const rpId = getRelyingPartyId();
 
-  console.log("[WebAuthn] Calling navigator.credentials.create...");
+  console.log(`[WebAuthn] Calling navigator.credentials.create with rp.id="${rpId}"...`);
   
   // Build PublicKeyCredentialCreationOptions
   const publicKeyOptions: PublicKeyCredentialCreationOptions = {
     challenge,
     rp: {
-      name: 'SMAS Attendance System'
-      // Omit id completely so the browser automatically scopes it to the current origin domain.
-      // This avoids errors if using localhost, custom subdomains, or local network IPs.
+      name: 'SMAS Attendance System',
+      id: rpId
     },
     user: {
       id: userId,
@@ -135,12 +169,13 @@ export const verifyBiometrics = async (
 
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const credentialBuffer = base64ToBuffer(credentialId);
+  const rpId = getRelyingPartyId();
 
-  console.log("[WebAuthn] Calling navigator.credentials.get...");
+  console.log(`[WebAuthn] Calling navigator.credentials.get with rpId="${rpId}"...`);
 
   const publicKeyRequestOptions: PublicKeyCredentialRequestOptions = {
     challenge,
-    // Omit rpId completely so it defaults to current origin automatically.
+    rpId: rpId,
     allowCredentials: [
       {
         type: 'public-key',
