@@ -59,9 +59,14 @@ const MarkAttendance: React.FC = () => {
     handleMarking();
   }, [profile, authLoading, sessionId]);
 
-  const triggerVerification = () => {
+  const triggerVerification = async () => {
     if (status !== 'ready-to-scan' || !deviceFingerprint || isVerifying) return;
-    performDatabaseUpdate();
+    setIsVerifying(true);
+    try {
+      await performDatabaseUpdate();
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const [sessionRef, setSessionRef] = useState<any>(null);

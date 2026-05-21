@@ -57,10 +57,7 @@ const Attendance: React.FC = () => {
   const [securityError, setSecurityError] = useState<string>('');
   const [attendanceStatus, setAttendanceStatus] = useState<'idle' | 'success' | 'error' | 'already-marked'>('idle');
 
-  // Scanner state
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const SCAN_DURATION = 2000; // 2 seconds
+
 
   useEffect(() => {
     fetchStudents();
@@ -149,35 +146,9 @@ const Attendance: React.FC = () => {
     return () => clearInterval(timer);
   }, [isSessionActive, timeLeft, profile]);
 
-  // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
-  useEffect(() => {
-    let scanInterval: any;
-    if (isScanning) {
-      const startTime = Date.now();
-      scanInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, (elapsed / SCAN_DURATION) * 100);
-        setScanProgress(progress);
-
-        if (progress >= 100) {
-          setIsScanning(false);
-          setScanProgress(0);
-          handleStudentScan(profile?.studentId || '');
-        }
-      }, 50);
-    } else {
-      setScanProgress(0);
-    }
-    return () => clearInterval(scanInterval);
-  }, [isScanning]);
-
-  const handleScanStart = () => {
+  const triggerVerification = () => {
     if (saving || attendanceStatus !== 'idle') return;
-    setIsScanning(true);
-  };
-
-  const handleScanEnd = () => {
-    setIsScanning(false);
+    handleStudentScan(profile?.studentId || '');
   };
 
   const refreshLecturerLocation = async () => {
@@ -474,45 +445,49 @@ const Attendance: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Interactive Fingerprint Scanner */}
-                    {!saving && (
-                      <div style={{ textAlign: 'center' }}>
-                        <div 
-                          className={`scanner-container ${isScanning ? 'active' : ''}`}
-                          onPointerDown={handleScanStart}
-                          onPointerUp={handleScanEnd}
-                          onPointerCancel={handleScanEnd}
-                          onPointerLeave={handleScanEnd}
-                        >
-                          <div className="scanner-circle"></div>
-                          <svg className="progress-ring">
-                            <circle
-                              className="progress-ring-circle"
-                              r="60"
-                              cx="65"
-                              cy="65"
-                              style={{ 
-                                strokeDashoffset: 377 - (377 * scanProgress) / 100 
-                              }}
-                            />
-                          </svg>
-                          <div className="scan-line"></div>
-                          <Fingerprint className="fingerprint-icon" size={60} />
-                        </div>
-                        <span className="scanner-label">
-                          {isScanning ? 'Scanning Fingerprint...' : 'Hold to Scan Fingerprint'}
-                        </span>
-                      </div>
-                    )}
+                    {/* Modern Step-by-Step Instructions + Button */}
+                    <div style={{ textAlign: 'left', background: 'var(--bg-tertiary)', padding: '1.25rem', borderRadius: '10px' }}>
+                      <h4 style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>How to complete verification:</h4>
+                      <ol style={{ paddingLeft: '1.25rem', fontSize: '0.8rem', color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+                        <li style={{ marginBottom: '0.3rem' }}>Click the <strong>"Verify Identity"</strong> button below.</li>
+                        <li style={{ marginBottom: '0.3rem' }}>Place your finger on your device's <strong>physical fingerprint reader</strong> when prompted.</li>
+                        <li>Your presence will be instantly recorded in the active lecture roster.</li>
+                      </ol>
 
-                    {saving && (
-                      <div style={{ padding: '2rem 0', textAlign: 'center' }}>
-                        <Loader2 className="animate-spin" size={48} color="var(--accent-primary)" style={{ margin: '0 auto 1rem' }} />
-                        <p style={{ fontWeight: 600 }}>Verifying Identity...</p>
-                      </div>
-                    )}
-                    
-                    <p className="qr-hint">Hold your finger on the sensor above to verify and mark your attendance.</p>
+                      <button
+                        onClick={triggerVerification}
+                        disabled={saving}
+                        style={{
+                          width: '100%',
+                          padding: '0.8rem',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: saving ? 'var(--bg-secondary)' : 'var(--accent-primary)',
+                          color: saving ? 'var(--text-secondary)' : '#fff',
+                          fontWeight: 600,
+                          fontSize: '0.85rem',
+                          cursor: saving ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          transition: 'all 0.2s ease',
+                          boxShadow: saving ? 'none' : '0 4px 6px rgba(99, 102, 241, 0.15)'
+                        }}
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 className="animate-spin" size={16} />
+                            <span>Verifying via Device...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Fingerprint size={16} />
+                            <span>Verify Identity & Mark Attendance</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </>
                 )}
               </>
