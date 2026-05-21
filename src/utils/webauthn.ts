@@ -1,12 +1,6 @@
 /**
  * WebAuthn utilities for enrolling and verifying native platform biometrics
  * (Touch ID, Face ID, Android Fingerprint, Windows Hello).
- *
- * SECURITY DESIGN:
- * - Credentials are bound to: email + studentId + this physical device's secure enclave.
- * - The stored token format is: "webauthn:<credentialId>:<email>"
- * - Verification re-checks the email matches the stored token to prevent cross-account abuse.
- * - No browser-signature fallback — hardware biometrics are mandatory.
  */
 
 export const bufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -28,25 +22,34 @@ export const base64ToBuffer = (base64: string): ArrayBuffer => {
  * are supported by this browser and device.
  */
 export const isWebAuthnSupported = async (): Promise<boolean> => {
-  if (!window.PublicKeyCredential) return false;
+  console.log("[WebAuthn] Checking support...");
+  if (!window.PublicKeyCredential) {
+    console.warn("[WebAuthn] window.PublicKeyCredential is not defined");
+    return false;
+  }
   try {
-    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch {
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    console.log("[WebAuthn] Platform authenticator available:", available);
+    return available;
+  } catch (err) {
+    console.error("[WebAuthn] Error checking platform authenticator availability:", err);
     return false;
   }
 };
 
 /**
  * Enrolls a native biometric credential bound to this student's email + ID.
- * The user.id encodes both email and studentId to make the credential unique per user per device.
  */
 export const registerBiometrics = async (
   studentId: string,
   studentName: string,
   email: string
 ): Promise<{ credentialId: string; token: string }> => {
+  console.log("[WebAuthn] registerBiometrics started", { studentId, studentName, email });
+  
   const supported = await isWebAuthnSupported();
   if (!supported) {
+    console.error("[WebAuthn] Hardware biometrics not supported on this device/browser.");
     throw new Error(
       'Your device does not support hardware biometrics (Touch ID / Face ID / Windows Hello). ' +
       'Please use a device with biometric hardware to register.'
@@ -54,96 +57,109 @@ export const registerBiometrics = async (
   }
 
   const challenge = crypto.getRandomValues(new Uint8Array(32));
-
-  // Embed both email and studentId into the user.id so this credential is
-  // cryptographically bound to this specific account on this specific device.
   const userIdentity = `${email}::${studentId}`;
   const userId = new TextEncoder().encode(userIdentity);
 
-  const credential = await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: {
-        name: 'SMAS Attendance System',
-        id: window.location.hostname
-      },
-      user: {
-        id: userId,
-        name: email,           // shown in the native prompt
-        displayName: studentName
-      },
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 },    // ES256 (mobile secure enclaves)
-        { type: 'public-key', alg: -257 }   // RS256 (Windows Hello / laptops)
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform', // native device biometric sensors only
-        userVerification: 'required',        // fingerprint or face required
-        requireResidentKey: false
-      },
-      timeout: 60000
+  console.log("[WebAuthn] Calling navigator.credentials.create...");
+  
+  // Build PublicKeyCredentialCreationOptions
+  const publicKeyOptions: PublicKeyCredentialCreationOptions = {
+    challenge,
+    rp: {
+      name: 'SMAS Attendance System'
+      // Omit id completely so the browser automatically scopes it to the current origin domain.
+      // This avoids errors if using localhost, custom subdomains, or local network IPs.
+    },
+    user: {
+      id: userId,
+      name: email,
+      displayName: studentName
+    },
+    pubKeyCredParams: [
+      { type: 'public-key', alg: -7 },    // ES256
+      { type: 'public-key', alg: -257 }   // RS256
+    ],
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
+      userVerification: 'required',
+      requireResidentKey: false
+    },
+    timeout: 60000
+  };
+
+  try {
+    const credential = await navigator.credentials.create({
+      publicKey: publicKeyOptions
+    }) as PublicKeyCredential;
+
+    console.log("[WebAuthn] navigator.credentials.create returned credential:", credential);
+
+    if (!credential) {
+      console.error("[WebAuthn] Credential returned is null or undefined");
+      throw new Error('Biometric registration was cancelled or failed.');
     }
-  }) as PublicKeyCredential;
 
-  if (!credential) {
-    throw new Error('Biometric registration was cancelled or failed.');
+    const credentialId = bufferToBase64(credential.rawId);
+    const token = `webauthn:${credentialId}:${email}`;
+
+    console.log("[WebAuthn] Registration successful, generated token:", token);
+    return { credentialId, token };
+  } catch (err: any) {
+    console.error("[WebAuthn] Error during navigator.credentials.create:", err);
+    throw err;
   }
-
-  const credentialId = bufferToBase64(credential.rawId);
-
-  // Token format: "webauthn:<credentialId>:<email>"
-  // This lets us verify both the hardware credential AND the account email at scan time.
-  const token = `webauthn:${credentialId}:${email}`;
-
-  return { credentialId, token };
 };
 
 /**
  * Verifies the native biometrics for a registered credential token.
- * Also re-validates that the token belongs to the expected email to block cross-account abuse.
  */
 export const verifyBiometrics = async (
   storedToken: string,
   expectedEmail: string
 ): Promise<boolean> => {
-  // Token format: "webauthn:<credentialId>:<email>"
+  console.log("[WebAuthn] verifyBiometrics started", { storedToken, expectedEmail });
+  
   const parts = storedToken.split(':');
   if (parts.length < 3 || parts[0] !== 'webauthn') {
-    console.error('Invalid stored biometric token format.');
+    console.error('[WebAuthn] Invalid stored biometric token format:', storedToken);
     return false;
   }
 
   const credentialId = parts[1];
-  const tokenEmail = parts.slice(2).join(':'); // handles emails with colons (edge case)
+  const tokenEmail = parts.slice(2).join(':');
 
-  // Verify the email in the token matches the currently logged in user
   if (tokenEmail !== expectedEmail) {
-    console.warn('Biometric token email mismatch — cross-account attack blocked.');
+    console.warn('[WebAuthn] Biometric token email mismatch:', { tokenEmail, expectedEmail });
     return false;
   }
 
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const credentialBuffer = base64ToBuffer(credentialId);
 
+  console.log("[WebAuthn] Calling navigator.credentials.get...");
+
+  const publicKeyRequestOptions: PublicKeyCredentialRequestOptions = {
+    challenge,
+    // Omit rpId completely so it defaults to current origin automatically.
+    allowCredentials: [
+      {
+        type: 'public-key',
+        id: credentialBuffer
+      }
+    ],
+    userVerification: 'required',
+    timeout: 60000
+  };
+
   try {
     const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        rpId: window.location.hostname,
-        allowCredentials: [
-          {
-            type: 'public-key',
-            id: credentialBuffer
-          }
-        ],
-        userVerification: 'required', // enforce hardware fingerprint scan
-        timeout: 60000
-      }
+      publicKey: publicKeyRequestOptions
     });
 
+    console.log("[WebAuthn] navigator.credentials.get returned assertion:", assertion);
     return !!assertion;
   } catch (err) {
-    console.error('Biometric verification rejected or failed:', err);
+    console.error('[WebAuthn] Biometric verification failed or was cancelled:', err);
     return false;
   }
 };
