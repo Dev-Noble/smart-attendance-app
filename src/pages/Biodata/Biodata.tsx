@@ -250,11 +250,30 @@ const Biodata: React.FC = () => {
               <CheckCircle size={56} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
               <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Device Registered</h3>
               <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>Your primary device fingerprint is secured.</p>
-              <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'inline-block' }}>
+              <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '1.5rem' }}>
                 <span>Signature:</span>
                 <code style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: 'var(--success)' }}>
                   {registeredFingerprint.substring(0, 16)}...
                 </code>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setRegisteredFingerprint('')}
+                  style={{
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  🔄 Register New Device / Re-register
+                </button>
               </div>
             </div>
           ) : (
