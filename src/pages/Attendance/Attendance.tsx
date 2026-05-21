@@ -170,7 +170,7 @@ const Attendance: React.FC = () => {
     return () => clearInterval(scanInterval);
   }, [isScanning]);
 
-  const handleScanStart = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleScanStart = () => {
     if (saving || attendanceStatus !== 'idle') return;
     setIsScanning(true);
   };
@@ -266,6 +266,14 @@ const Attendance: React.FC = () => {
       return;
     }
 
+    if (!profile) {
+      setSecurityError('User profile not loaded. Please log in.');
+      setSaving(false);
+      return;
+    }
+
+    const studentProfile = profile as any;
+
     setSaving(true);
     setSecurityError('');
 
@@ -289,20 +297,20 @@ const Attendance: React.FC = () => {
       }
 
       // ── Check 1: Student is actually registered ─────────────────────────────
-      if (!profile.studentId) {
+      if (!studentProfile.studentId) {
         setSecurityError('You must complete your Biodata and register your Student ID first.');
         setSaving(false);
         return;
       }
 
       // ── Check 2: Primary Device Match ───────────────────────────────────────
-      if (!profile.registeredFingerprint) {
+      if (!studentProfile.registeredFingerprint) {
         setSecurityError('You have not registered a primary device. Please update your Biodata.');
         setSaving(false);
         return;
       }
 
-      if (profile.registeredFingerprint !== deviceFingerprint) {
+      if (studentProfile.registeredFingerprint !== deviceFingerprint) {
         setSecurityError('Unrecognized Device: You can only mark attendance from your registered primary device.');
         setSaving(false);
         return;
@@ -310,7 +318,7 @@ const Attendance: React.FC = () => {
 
       // ── Check 3: One scan per device (Extra Safety) ─────────────────────────
       if (sessionData.deviceFingerprints?.includes(deviceFingerprint) && 
-          !sessionData.studentsPresent?.includes(profile.studentId)) {
+          !sessionData.studentsPresent?.includes(studentProfile.studentId)) {
         setSecurityError('Security Alert: This device has already been used to mark attendance for another student.');
         setAttendanceStatus('error');
         setSaving(false);
@@ -353,12 +361,12 @@ const Attendance: React.FC = () => {
       // ── All checks passed — record attendance ──────────────────────────────
       await updateDoc(sessionRef, {
         studentsPresent: arrayUnion(studentId),
-        deviceFingerprints: arrayUnion(fingerprint)
+        deviceFingerprints: arrayUnion(deviceFingerprint)
       });
 
       await logActivity(
-        profile?.uid || 'system',
-        profile?.name || 'Student',
+        studentProfile.uid,
+        studentProfile.name,
         'Marked Attendance',
         `Joined session ${sessionId}`,
         'attendance'

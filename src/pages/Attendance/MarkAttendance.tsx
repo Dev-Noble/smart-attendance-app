@@ -3,13 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, MapPin, Fingerprint } from 'lucide-react';
+import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, Fingerprint } from 'lucide-react';
 import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
 import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
 import './Attendance.css';
 
-type StatusType = 'loading' | 'success' | 'error' | 'already-marked';
+type StatusType = 'loading' | 'success' | 'error' | 'already-marked' | 'ready-to-scan';
 
 const MarkAttendance: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -81,7 +81,7 @@ const MarkAttendance: React.FC = () => {
     return () => clearInterval(scanInterval);
   }, [isScanning]);
 
-  const handleScanStart = (e: React.PointerEvent) => {
+  const handleScanStart = () => {
     if (status !== 'ready-to-scan' || !deviceFingerprint) return;
     setIsScanning(true);
   };
@@ -91,7 +91,6 @@ const MarkAttendance: React.FC = () => {
   };
 
   const [sessionRef, setSessionRef] = useState<any>(null);
-  const [sessionData, setSessionData] = useState<any>(null);
   const [fingerprintToSave, setFingerprintToSave] = useState<string>('');
 
   const handleMarking = async () => {
@@ -188,8 +187,7 @@ const MarkAttendance: React.FC = () => {
       // Artificial delay so student can actually see the verification process
       // await new Promise(resolve => setTimeout(resolve, 1500));
 
-      setSessionRef(sessionRefObj);
-      setSessionData(sessionDataObj);
+      setSessionRef(sessionRef);
       setFingerprintToSave(fingerprint);
       setStatus('ready-to-scan'); // Custom state to trigger scanner UI
       
