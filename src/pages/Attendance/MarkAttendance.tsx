@@ -71,6 +71,7 @@ const MarkAttendance: React.FC = () => {
         setScanProgress(progress);
 
         if (progress >= 100) {
+          clearInterval(scanInterval);
           setIsScanning(false);
           setScanProgress(0);
           performDatabaseUpdate(); // Only update after scan

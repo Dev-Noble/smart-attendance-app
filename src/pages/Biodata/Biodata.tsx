@@ -63,6 +63,7 @@ const Biodata: React.FC = () => {
         setScanProgress(progress);
 
         if (progress >= 100) {
+          clearInterval(scanInterval);
           setIsScanning(false);
           setScanProgress(0);
           try {
