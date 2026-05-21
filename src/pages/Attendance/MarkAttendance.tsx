@@ -23,10 +23,7 @@ const MarkAttendance: React.FC = () => {
 
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // Scanner state
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const SCAN_DURATION = 2000; // 2 seconds
+
 
   useEffect(() => {
     if (authLoading) return;
@@ -62,37 +59,9 @@ const MarkAttendance: React.FC = () => {
     handleMarking();
   }, [profile, authLoading, sessionId]);
 
-  // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
-  useEffect(() => {
-    let scanInterval: any;
-    if (isScanning && !isVerifying) {
-      const startTime = Date.now();
-      scanInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, (elapsed / SCAN_DURATION) * 100);
-        setScanProgress(progress);
-
-        if (progress >= 100) {
-          clearInterval(scanInterval);
-          setIsScanning(false);
-          setScanProgress(0);
-          setIsVerifying(true);
-          performDatabaseUpdate().finally(() => setIsVerifying(false));
-        }
-      }, 50);
-    } else {
-      setScanProgress(0);
-    }
-    return () => clearInterval(scanInterval);
-  }, [isScanning, isVerifying]);
-
-  const handleScanStart = () => {
-    if (status !== 'ready-to-scan' || !deviceFingerprint || isScanning || isVerifying) return;
-    setIsScanning(true);
-  };
-
-  const handleScanEnd = () => {
-    setIsScanning(false);
+  const triggerVerification = () => {
+    if (status !== 'ready-to-scan' || !deviceFingerprint || isVerifying) return;
+    performDatabaseUpdate();
   };
 
   const [sessionRef, setSessionRef] = useState<any>(null);
@@ -292,29 +261,23 @@ const MarkAttendance: React.FC = () => {
         {status === 'ready-to-scan' && (
           <div style={{ textAlign: 'center' }}>
             <div 
-              className={`scanner-container ${isScanning ? 'active' : ''}`}
-              onPointerDown={handleScanStart}
-              onPointerUp={handleScanEnd}
-              onPointerCancel={handleScanEnd}
-              onPointerLeave={handleScanEnd}
+              className={`scanner-container ${isVerifying ? 'active' : ''}`}
+              onClick={triggerVerification}
+              style={{
+                cursor: isVerifying ? 'not-allowed' : 'pointer',
+                opacity: isVerifying ? 0.6 : 1,
+                margin: '0 auto 1.5rem',
+                width: '120px',
+                height: '120px',
+                position: 'relative'
+              }}
             >
               <div className="scanner-circle"></div>
-              <svg className="progress-ring">
-                <circle
-                  className="progress-ring-circle"
-                  r="60"
-                  cx="65"
-                  cy="65"
-                  style={{ 
-                    strokeDashoffset: 377 - (377 * scanProgress) / 100 
-                  }}
-                />
-              </svg>
               <div className="scan-line"></div>
-              <Fingerprint className="fingerprint-icon" size={60} />
+              <Fingerprint className="fingerprint-icon" size={60} style={{ transition: 'transform 0.2s', transform: isVerifying ? 'scale(1.15)' : 'scale(1)' }} />
             </div>
-            <span className="scanner-label" style={{ display: 'block', marginBottom: '2rem' }}>
-              {isScanning ? 'Scanning Fingerprint...' : 'Hold to Scan'}
+            <span className="scanner-label" style={{ display: 'block', marginBottom: '2rem', fontWeight: 600 }}>
+              {isVerifying ? 'Verifying identity...' : 'Tap to Scan & Mark Presence'}
             </span>
           </div>
         )}

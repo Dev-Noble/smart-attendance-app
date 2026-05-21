@@ -33,11 +33,6 @@ const Biodata: React.FC = () => {
   const [registeredFingerprint, setRegisteredFingerprint] = useState<string>('');
   
   const [isEnrolling, setIsEnrolling] = useState(false);
-  
-  // Scanner state
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const SCAN_DURATION = 800; // 800ms for faster interaction
 
   useEffect(() => {
     if (profile) {
@@ -54,63 +49,34 @@ const Biodata: React.FC = () => {
     }
   }, [profile]);
 
-  const enrollmentTriggered = React.useRef(false);
-
-  // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
-  useEffect(() => {
-    let scanInterval: any;
-    if (isScanning && !isEnrolling) {
-      const startTime = Date.now();
-      scanInterval = setInterval(async () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, (elapsed / SCAN_DURATION) * 100);
-        setScanProgress(progress);
-
-        if (progress >= 100) {
-          clearInterval(scanInterval);
-          setIsScanning(false);
-          setScanProgress(0);
-          
-          if (!enrollmentTriggered.current) {
-            enrollmentTriggered.current = true;
-            setIsEnrolling(true);
-            try {
-              // Hardware WebAuthn only — no browser-signature fallback
-              const email = (profile as any).email || profile?.name || '';
-              const result = await registerBiometrics(formData.studentId, formData.name, email);
-              // Store the full token: "webauthn:<credentialId>:<email>"
-              setRegisteredFingerprint(result.token);
-              alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
-            } catch (err: any) {
-              console.error('Biometric registration failed:', err);
-              alert(`Registration failed: ${err.message || err}`);
-            } finally {
-              setIsEnrolling(false);
-              enrollmentTriggered.current = false;
-            }
-          }
-        }
-      }, 50);
-    } else if (!isEnrolling) {
-      setScanProgress(0);
-      enrollmentTriggered.current = false;
-    }
-    return () => clearInterval(scanInterval);
-  }, [isScanning, isEnrolling, formData, profile]);
-
-  const handleScanStart = (e: React.PointerEvent) => {
-    e.preventDefault(); // Prevent text selection/drag behavior
-    if (saving || isScanning || isEnrolling) return;
+  // ─── Fingerprint Scanning Logic (Instant Click/Tap Trigger) ──────────────
+  const triggerEnrollment = async () => {
+    if (saving || isEnrolling) return;
 
     if (!formData.name || !formData.studentId) {
       alert("Please fill in your Full Name and Student ID first so we can enroll your biometric credentials.");
       return;
     }
-    setIsScanning(true);
-  };
 
-  const handleScanEnd = () => {
-    setIsScanning(false);
+    setIsEnrolling(true);
+    try {
+      console.log("[WebAuthn] Initiating instant biometric registration...");
+      const email = (profile as any).email || profile?.name || '';
+      const result = await registerBiometrics(formData.studentId, formData.name, email);
+      
+      setRegisteredFingerprint(result.token);
+      alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
+    } catch (err: any) {
+      console.error('Biometric registration failed:', err);
+      // Keep it user-friendly
+      if (err.name === 'NotAllowedError') {
+        alert('Biometric registration was cancelled or timed out.');
+      } else {
+        alert(`Registration failed: ${err.message || err}`);
+      }
+    } finally {
+      setIsEnrolling(false);
+    }
   };
 
   const handleSave = async () => {
@@ -271,36 +237,28 @@ const Biodata: React.FC = () => {
 
         {/* Scanner — always visible */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
-          <div style={{ textAlign: 'center', touchAction: 'none' }}>
+          <div style={{ textAlign: 'center' }}>
             <div 
-              className={`scanner-container ${isScanning ? 'active' : ''}`}
-              onPointerDown={handleScanStart}
-              onPointerUp={handleScanEnd}
-              onPointerCancel={handleScanEnd}
-              onPointerLeave={handleScanEnd}
-              style={{ width: '100px', height: '100px', margin: '0 auto 1.5rem', cursor: (saving || isScanning || isEnrolling) ? 'not-allowed' : 'pointer' }}
+              className={`scanner-container ${isEnrolling ? 'active' : ''}`}
+              onClick={triggerEnrollment}
+              style={{ 
+                width: '100px', 
+                height: '100px', 
+                margin: '0 auto 1.5rem', 
+                cursor: (saving || isEnrolling) ? 'not-allowed' : 'pointer',
+                opacity: (saving || isEnrolling) ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
             >
               <div className="scanner-circle"></div>
-              <svg className="progress-ring" style={{ width: '110px', height: '110px', top: '-5px', left: '-5px' }}>
-                <circle
-                  className="progress-ring-circle"
-                  r="50"
-                  cx="55"
-                  cy="55"
-                  style={{ 
-                    strokeDasharray: 314,
-                    strokeDashoffset: 314 - (314 * scanProgress) / 100 
-                  }}
-                />
-              </svg>
               <div className="scan-line"></div>
-              <Fingerprint className="fingerprint-icon" size={50} />
+              <Fingerprint className="fingerprint-icon" size={50} style={{ transition: 'transform 0.2s', transform: isEnrolling ? 'scale(1.15)' : 'scale(1)' }} />
             </div>
-            <span className="scanner-label" style={{ fontWeight: 600, color: isScanning ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
-              {isEnrolling ? 'Waiting for biometric scan...' : isScanning ? 'Generating Fingerprint...' : registeredFingerprint ? 'Hold to Re-register Device' : 'Hold to Register Device'}
+            <span className="scanner-label" style={{ fontWeight: 600, color: isEnrolling ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+              {isEnrolling ? 'Verification in progress...' : registeredFingerprint ? 'Tap to Re-register Device' : 'Tap to Register Device'}
             </span>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>
-              {registeredFingerprint ? 'Hold scanner to overwrite with a new biometric credential' : 'Hold until the circle is complete'}
+              {isEnrolling ? 'Please verify your identity on your system prompt.' : registeredFingerprint ? 'Click to overwrite with a new biometric credential' : 'Click the fingerprint icon to begin secure enrollment'}
             </p>
           </div>
         </div>
