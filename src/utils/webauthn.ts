@@ -114,8 +114,7 @@ export const registerBiometrics = async (
       { type: 'public-key', alg: -257 }   // RS256 (Windows Hello / laptops)
     ],
     authenticatorSelection: {
-      authenticatorAttachment: 'platform',
-      userVerification: 'preferred' // 'preferred' prevents silent browser hangs/conflicts with TPM/PIN configs
+      userVerification: 'preferred' // Removed 'authenticatorAttachment' to fix Chromium/Windows Hello hang bug after scanning
     },
     timeout: 60000
   };
