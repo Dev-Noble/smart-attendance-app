@@ -16,8 +16,7 @@ import { db } from '../../services/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logActivity } from '../../services/activityService';
 import { syncStudentBiodata } from '../../services/studentService';
-import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
-import { isWebAuthnSupported, registerBiometrics } from '../../utils/webauthn';
+import { registerBiometrics } from '../../utils/webauthn';
 import './Biodata.css';
 
 const Biodata: React.FC = () => {
@@ -67,21 +66,17 @@ const Biodata: React.FC = () => {
           setIsScanning(false);
           setScanProgress(0);
           try {
-            const supported = await isWebAuthnSupported();
-            if (supported) {
-              // Trigger hardware biometric enrollment
-              const result = await registerBiometrics(formData.studentId, formData.name);
-              setRegisteredFingerprint(`webauthn:${result.credentialId}`);
-              alert("Native hardware biometrics (Touch ID / Face ID) enrolled successfully!");
-            } else {
-              // Fallback to legacy browser fingerprint
-              const fp = await getDeviceFingerprint();
-              setRegisteredFingerprint(`legacy:${fp}`);
-              alert("No native biometrics supported. Enrolled using browser signature fallback.");
-            }
+            // Hardware WebAuthn only — no browser-signature fallback
+            const email = (profile as any).email || profile?.name || '';
+            const result = await registerBiometrics(formData.studentId, formData.name, email);
+            // Store the full token: "webauthn:<credentialId>:<email>"
+            setRegisteredFingerprint(result.token);
+            alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
           } catch (err: any) {
-            console.error("Biometric registration failed:", err);
-            alert(`Biometric registration failed: ${err.message || err}`);
+            console.error('Biometric registration failed:', err);
+            setIsScanning(false);
+            setScanProgress(0);
+            alert(`Registration failed: ${err.message || err}`);
           }
         }
       }, 50);

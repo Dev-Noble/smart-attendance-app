@@ -126,33 +126,17 @@ const MarkAttendance: React.FC = () => {
       }
 
       // ── Check 2: Primary Device Match ────────────────────────────────────────
-      const fingerprint = await getDeviceFingerprint();
       const registeredFingerprint = (profile as any).registeredFingerprint;
 
-      if (!registeredFingerprint) {
+      if (!registeredFingerprint || !registeredFingerprint.startsWith('webauthn:')) {
         setStatus('error');
         setMessage('Device Not Registered');
-        setDetail('You have not registered a primary device. Please update your Biodata first.');
+        setDetail('You have not registered your native biometrics. Please complete registration in Biodata first.');
         return;
       }
 
-      const isWebAuthn = registeredFingerprint.startsWith('webauthn:');
-      const isLegacyPrefixed = registeredFingerprint.startsWith('legacy:');
-      const targetFingerprint = isWebAuthn 
-        ? registeredFingerprint.substring('webauthn:'.length)
-        : (isLegacyPrefixed ? registeredFingerprint.substring('legacy:'.length) : registeredFingerprint);
-
-      // Verify immediate signature match for legacy enrollments
-      if (!isWebAuthn) {
-        if (fingerprint !== targetFingerprint) {
-          setStatus('error');
-          setMessage('Unrecognized Device');
-          setDetail('You can only mark attendance from your registered primary device to prevent impersonation.');
-          return;
-        }
-      }
-
       // ── Check 2.1: One scan per device (Extra Safety) ──────────────────────
+      const fingerprint = await getDeviceFingerprint(); // Still get browser hash for session fingerprint logs
       const usedFingerprints: string[] = sessionData.deviceFingerprints || [];
 
       if (usedFingerprints.includes(fingerprint) && !(sessionData.studentsPresent || []).includes(profile.studentId)) {
@@ -194,9 +178,6 @@ const MarkAttendance: React.FC = () => {
       }
 
       // ── All checks passed ──────────────────────────────────────────────────
-      // Artificial delay so student can actually see the verification process
-      // await new Promise(resolve => setTimeout(resolve, 1500));
-
       setSessionRef(sessionRef);
       setFingerprintToSave(fingerprint);
       setStatus('ready-to-scan'); // Custom state to trigger scanner UI
@@ -215,17 +196,21 @@ const MarkAttendance: React.FC = () => {
     
     try {
       const registeredFingerprint = (profile as any).registeredFingerprint || '';
-      const isWebAuthn = registeredFingerprint.startsWith('webauthn:');
       
-      if (isWebAuthn) {
-        const targetFingerprint = registeredFingerprint.substring('webauthn:'.length);
-        const verified = await verifyBiometrics(targetFingerprint);
-        if (!verified) {
-          setStatus('error');
-          setMessage('Biometric Failed');
-          setDetail('Native biometric verification was denied or timed out. Please scan the correct finger.');
-          return;
-        }
+      if (!registeredFingerprint.startsWith('webauthn:')) {
+        setStatus('error');
+        setMessage('Biometrics Outdated');
+        setDetail('Your biometric registration is outdated. Please register biometrics in Biodata.');
+        return;
+      }
+
+      const email = profile.email || '';
+      const verified = await verifyBiometrics(registeredFingerprint, email);
+      if (!verified) {
+        setStatus('error');
+        setMessage('Biometric Failed');
+        setDetail('Native biometric verification was denied or timed out. Please scan the correct finger.');
+        return;
       }
 
       await updateDoc(sessionRef, {

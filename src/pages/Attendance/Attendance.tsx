@@ -304,35 +304,28 @@ const Attendance: React.FC = () => {
         return;
       }
 
-      // ── Check 2: Primary Device Match ───────────────────────────────────────
+      // ── Check 2: Hardware Biometric Verification ───────────────────────────
       if (!studentProfile.registeredFingerprint) {
         setSecurityError('You have not registered a primary device. Please update your Biodata.');
         setSaving(false);
         return;
       }
 
-      const regFingerprint = studentProfile.registeredFingerprint;
-      const isWebAuthn = regFingerprint.startsWith('webauthn:');
-      const isLegacyPrefixed = regFingerprint.startsWith('legacy:');
-      const targetFingerprint = isWebAuthn 
-        ? regFingerprint.substring('webauthn:'.length)
-        : (isLegacyPrefixed ? regFingerprint.substring('legacy:'.length) : regFingerprint);
+      const storedToken: string = studentProfile.registeredFingerprint;
+      const expectedEmail: string = studentProfile.email || '';
 
-      if (isWebAuthn) {
-        // Trigger actual native hardware biometrics (Touch ID / Face ID)
-        const verified = await verifyBiometrics(targetFingerprint);
-        if (!verified) {
-          setSecurityError('Biometric Verification Failed: Access denied or wrong finger scanned.');
-          setSaving(false);
-          return;
-        }
-      } else {
-        // Fallback to legacy device-signature match
-        if (targetFingerprint !== deviceFingerprint) {
-          setSecurityError('Unrecognized Device: You can only mark attendance from your registered primary device.');
-          setSaving(false);
-          return;
-        }
+      if (!storedToken.startsWith('webauthn:')) {
+        setSecurityError('Your device registration is outdated. Please re-register your biometrics in Biodata.');
+        setSaving(false);
+        return;
+      }
+
+      // Trigger native hardware biometrics — verifies credentialId AND email match
+      const verified = await verifyBiometrics(storedToken, expectedEmail);
+      if (!verified) {
+        setSecurityError('Biometric Verification Failed: Wrong finger scanned, or biometric was cancelled.');
+        setSaving(false);
+        return;
       }
 
       // ── Check 3: One scan per device (Extra Safety) ─────────────────────────
