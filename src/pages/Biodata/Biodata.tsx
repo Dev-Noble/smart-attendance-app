@@ -235,32 +235,50 @@ const Biodata: React.FC = () => {
           </div>
         )}
 
-        {/* Scanner — always visible */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', background: 'var(--bg-tertiary)', borderRadius: '12px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div 
-              className={`scanner-container ${isEnrolling ? 'active' : ''}`}
-              onClick={triggerEnrollment}
-              style={{ 
-                width: '100px', 
-                height: '100px', 
-                margin: '0 auto 1.5rem', 
-                cursor: (saving || isEnrolling) ? 'not-allowed' : 'pointer',
-                opacity: (saving || isEnrolling) ? 0.6 : 1,
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <div className="scanner-circle"></div>
-              <div className="scan-line"></div>
-              <Fingerprint className="fingerprint-icon" size={50} style={{ transition: 'transform 0.2s', transform: isEnrolling ? 'scale(1.15)' : 'scale(1)' }} />
-            </div>
-            <span className="scanner-label" style={{ fontWeight: 600, color: isEnrolling ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
-              {isEnrolling ? 'Verification in progress...' : registeredFingerprint ? 'Tap to Re-register Device' : 'Tap to Register Device'}
-            </span>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.75rem' }}>
-              {isEnrolling ? 'Please verify your identity on your system prompt.' : registeredFingerprint ? 'Click to overwrite with a new biometric credential' : 'Click the fingerprint icon to begin secure enrollment'}
-            </p>
-          </div>
+        {/* Modern Step-by-Step Instructions + Button */}
+        <div style={{ padding: '1.5rem', background: 'var(--bg-tertiary)', borderRadius: '12px', textAlign: 'left' }}>
+          <h4 style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>How to complete registration:</h4>
+          <ol style={{ paddingLeft: '1.25rem', fontSize: '0.85rem', color: 'var(--text-tertiary)', lineHeight: 1.7, marginBottom: '1.5rem' }}>
+            <li style={{ marginBottom: '0.4rem' }}>Click the <strong>"Start Device Registration"</strong> button below.</li>
+            <li style={{ marginBottom: '0.4rem' }}>Your browser will display a secure system prompt (Windows Hello / Touch ID).</li>
+            <li style={{ marginBottom: '0.4rem' }}>Place your finger on your laptop or phone's <strong>physical fingerprint reader</strong> (or look at the camera).</li>
+            <li>Once completed successfully, click the main <strong>"Save Biodata"</strong> button to save your profile.</li>
+          </ol>
+
+          <button
+            type="button"
+            onClick={triggerEnrollment}
+            disabled={saving || isEnrolling}
+            style={{
+              width: '100%',
+              padding: '0.85rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: isEnrolling ? 'var(--bg-secondary)' : 'var(--accent-primary)',
+              color: isEnrolling ? 'var(--text-secondary)' : '#fff',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              cursor: (saving || isEnrolling) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+              boxShadow: isEnrolling ? 'none' : '0 4px 6px rgba(99, 102, 241, 0.15)'
+            }}
+          >
+            {isEnrolling ? (
+              <>
+                <Loader2 className="animate-spin" size={18} />
+                <span>Waiting for Physical Device Scan...</span>
+              </>
+            ) : (
+              <>
+                <Fingerprint size={18} />
+                <span>{registeredFingerprint ? 'Re-register Biometric Device' : 'Start Device Registration'}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

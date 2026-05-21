@@ -255,30 +255,51 @@ const MarkAttendance: React.FC = () => {
 
         <h2 style={{ marginBottom: '0.75rem', fontSize: '1.75rem' }}>{message || 'Ready to Verify'}</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.7, fontSize: '0.95rem' }}>
-          {status === 'ready-to-scan' ? 'Please hold your finger on the sensor below to complete verification.' : detail}
+          {status === 'ready-to-scan' ? 'Follow the steps below to verify your biometrics using your physical device sensor.' : detail}
         </p>
 
         {status === 'ready-to-scan' && (
-          <div style={{ textAlign: 'center' }}>
-            <div 
-              className={`scanner-container ${isVerifying ? 'active' : ''}`}
+          <div style={{ textAlign: 'left', background: 'var(--bg-tertiary)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+            <h4 style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>How to mark presence:</h4>
+            <ol style={{ paddingLeft: '1.25rem', fontSize: '0.85rem', color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+              <li style={{ marginBottom: '0.4rem' }}>Click the <strong>"Verify Identity"</strong> button below.</li>
+              <li style={{ marginBottom: '0.4rem' }}>Place your finger on your laptop or phone's <strong>physical fingerprint reader</strong> when prompted.</li>
+              <li>Your presence will be immediately logged into the class roster.</li>
+            </ol>
+
+            <button
               onClick={triggerVerification}
+              disabled={isVerifying}
               style={{
+                width: '100%',
+                padding: '0.85rem',
+                borderRadius: '8px',
+                border: 'none',
+                background: isVerifying ? 'var(--bg-secondary)' : 'var(--accent-primary)',
+                color: isVerifying ? 'var(--text-secondary)' : '#fff',
+                fontWeight: 600,
+                fontSize: '0.9rem',
                 cursor: isVerifying ? 'not-allowed' : 'pointer',
-                opacity: isVerifying ? 0.6 : 1,
-                margin: '0 auto 1.5rem',
-                width: '120px',
-                height: '120px',
-                position: 'relative'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                boxShadow: isVerifying ? 'none' : '0 4px 6px rgba(99, 102, 241, 0.15)'
               }}
             >
-              <div className="scanner-circle"></div>
-              <div className="scan-line"></div>
-              <Fingerprint className="fingerprint-icon" size={60} style={{ transition: 'transform 0.2s', transform: isVerifying ? 'scale(1.15)' : 'scale(1)' }} />
-            </div>
-            <span className="scanner-label" style={{ display: 'block', marginBottom: '2rem', fontWeight: 600 }}>
-              {isVerifying ? 'Verifying identity...' : 'Tap to Scan & Mark Presence'}
-            </span>
+              {isVerifying ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>Waiting for Physical Device Scan...</span>
+                </>
+              ) : (
+                <>
+                  <Fingerprint size={18} />
+                  <span>Verify Identity & Mark Presence</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 
