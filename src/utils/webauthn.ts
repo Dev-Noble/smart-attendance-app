@@ -110,13 +110,12 @@ export const registerBiometrics = async (
       displayName: studentName
     },
     pubKeyCredParams: [
-      { type: 'public-key', alg: -7 },    // ES256
-      { type: 'public-key', alg: -257 }   // RS256
+      { type: 'public-key', alg: -7 },    // ES256 (mobile/modern secure enclaves)
+      { type: 'public-key', alg: -257 }   // RS256 (Windows Hello / laptops)
     ],
     authenticatorSelection: {
       authenticatorAttachment: 'platform',
-      userVerification: 'required',
-      requireResidentKey: false
+      userVerification: 'preferred' // 'preferred' prevents silent browser hangs/conflicts with TPM/PIN configs
     },
     timeout: 60000
   };
@@ -182,7 +181,7 @@ export const verifyBiometrics = async (
         id: credentialBuffer
       }
     ],
-    userVerification: 'required',
+    userVerification: 'preferred', // align with preferred setting to prevent hangs
     timeout: 60000
   };
 
