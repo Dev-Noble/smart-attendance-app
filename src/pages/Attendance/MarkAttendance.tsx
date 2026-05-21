@@ -21,6 +21,8 @@ const MarkAttendance: React.FC = () => {
   const [detail, setDetail] = useState('');
   const [deviceFingerprint, setDeviceFingerprint] = useState<string>('');
 
+  const [isVerifying, setIsVerifying] = useState(false);
+
   // Scanner state
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -63,7 +65,7 @@ const MarkAttendance: React.FC = () => {
   // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
   useEffect(() => {
     let scanInterval: any;
-    if (isScanning) {
+    if (isScanning && !isVerifying) {
       const startTime = Date.now();
       scanInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
@@ -74,17 +76,18 @@ const MarkAttendance: React.FC = () => {
           clearInterval(scanInterval);
           setIsScanning(false);
           setScanProgress(0);
-          performDatabaseUpdate(); // Only update after scan
+          setIsVerifying(true);
+          performDatabaseUpdate().finally(() => setIsVerifying(false));
         }
       }, 50);
     } else {
       setScanProgress(0);
     }
     return () => clearInterval(scanInterval);
-  }, [isScanning]);
+  }, [isScanning, isVerifying]);
 
   const handleScanStart = () => {
-    if (status !== 'ready-to-scan' || !deviceFingerprint) return;
+    if (status !== 'ready-to-scan' || !deviceFingerprint || isScanning || isVerifying) return;
     setIsScanning(true);
   };
 

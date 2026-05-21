@@ -32,6 +32,8 @@ const Biodata: React.FC = () => {
 
   const [registeredFingerprint, setRegisteredFingerprint] = useState<string>('');
   
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  
   // Scanner state
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -55,7 +57,7 @@ const Biodata: React.FC = () => {
   // ─── Fingerprint Scanning Logic ───────────────────────────────────────────
   useEffect(() => {
     let scanInterval: any;
-    if (isScanning) {
+    if (isScanning && !isEnrolling) {
       const startTime = Date.now();
       scanInterval = setInterval(async () => {
         const elapsed = Date.now() - startTime;
@@ -66,6 +68,7 @@ const Biodata: React.FC = () => {
           clearInterval(scanInterval);
           setIsScanning(false);
           setScanProgress(0);
+          setIsEnrolling(true);
           try {
             // Hardware WebAuthn only — no browser-signature fallback
             const email = (profile as any).email || profile?.name || '';
@@ -75,9 +78,9 @@ const Biodata: React.FC = () => {
             alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
           } catch (err: any) {
             console.error('Biometric registration failed:', err);
-            setIsScanning(false);
-            setScanProgress(0);
             alert(`Registration failed: ${err.message || err}`);
+          } finally {
+            setIsEnrolling(false);
           }
         }
       }, 50);
@@ -85,11 +88,11 @@ const Biodata: React.FC = () => {
       setScanProgress(0);
     }
     return () => clearInterval(scanInterval);
-  }, [isScanning, formData]);
+  }, [isScanning, isEnrolling, formData]);
 
   const handleScanStart = (e: React.PointerEvent) => {
     e.preventDefault(); // Prevent text selection/drag behavior
-    if (saving || registeredFingerprint) return;
+    if (saving || registeredFingerprint || isScanning || isEnrolling) return;
 
     if (!formData.name || !formData.studentId) {
       alert("Please fill in your Full Name and Student ID first so we can enroll your biometric credentials.");
