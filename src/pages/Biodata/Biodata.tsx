@@ -37,7 +37,7 @@ const Biodata: React.FC = () => {
   // Scanner state
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
-  const SCAN_DURATION = 2000; // 2 seconds
+  const SCAN_DURATION = 800; // 800ms for faster interaction
 
   useEffect(() => {
     if (profile) {
