@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { CheckCircle, Loader2, AlertCircle, LogIn, Shield, Fingerprint } from 'lucide-react';
 import { logActivity } from '../../services/activityService';
@@ -100,6 +100,27 @@ const MarkAttendance: React.FC = () => {
         setStatus('already-marked');
         setMessage('Already Recorded');
         setDetail('Your attendance for this session has already been marked.');
+        return;
+      }
+
+      // ── Check 1.5: Enrolled in Course ────────────────────────────────────────
+      const studentQuery = query(collection(db, 'students'), where('email', '==', profile.email));
+      const studentSnapshot = await getDocs(studentQuery);
+      if (studentSnapshot.empty) {
+        setStatus('error');
+        setMessage('Profile Incomplete');
+        setDetail('Please complete your Biodata first.');
+        return;
+      }
+
+      const studentData = studentSnapshot.docs[0].data();
+      const studentCourses: string[] = studentData.courses || [];
+      const sessionCourseId = sessionData.courseId || '';
+
+      if (!studentCourses.includes(sessionCourseId)) {
+        setStatus('error');
+        setMessage('Not Enrolled');
+        setDetail('You are not registered for this course and cannot mark attendance.');
         return;
       }
 

@@ -15,8 +15,9 @@ import { db } from './firebase';
 export interface AttendanceSession {
   id?: string;
   lecturerId: string;
-  courseId: string;
-  courseName: string;
+  courseId: string;               // Global course document ID
+  courseCode: string;             // Course code (e.g. CSC301)
+  courseName: string;             // Course title
   startTime: any;
   endTime?: any;
   isActive: boolean;
@@ -32,6 +33,7 @@ export interface AttendanceSession {
 export const createAttendanceSession = async (
   lecturerId: string,
   courseId: string,
+  courseCode: string,
   courseName: string,
   lecturerLocation?: { lat: number; lng: number },
   allowedRadius: number = 100
@@ -39,6 +41,7 @@ export const createAttendanceSession = async (
   const sessionData: AttendanceSession = {
     lecturerId,
     courseId,
+    courseCode,
     courseName,
     startTime: serverTimestamp(),
     isActive: true,

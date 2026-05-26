@@ -1,45 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  User, 
+import { useNavigate } from 'react-router-dom';
+import {
+  doc,
+  updateDoc,
+} from 'firebase/firestore';
+import { db } from '../../services/firebase';
+import { useAuth } from '../../context/AuthContext';
+import { logActivity } from '../../services/activityService';
+import { syncStudentBiodata } from '../../services/studentService';
+import { getDepartments, getLevels, type Department, type Level } from '../../services/courseService';
+import { registerBiometrics } from '../../utils/webauthn';
+import {
+  Loader2,
+  Save,
+  User,
   Hash,
   Book,
   Phone,
   MapPin,
-  Save,
-  Loader2,
+  CheckCircle,
   Fingerprint,
   Shield,
-  CheckCircle
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
-import { logActivity } from '../../services/activityService';
-import { syncStudentBiodata } from '../../services/studentService';
-import { registerBiometrics } from '../../utils/webauthn';
 import './Biodata.css';
 
 const Biodata: React.FC = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     studentId: '',
-    major: '',
+    departmentId: '',
+    levelId: '',
     phone: '',
     address: ''
   });
 
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [registeredFingerprint, setRegisteredFingerprint] = useState<string>('');
-  
   const [isEnrolling, setIsEnrolling] = useState(false);
+
+  useEffect(() => {
+    const loadDeptsAndLevels = async () => {
+      try {
+        const [depts, lvls] = await Promise.all([getDepartments(), getLevels()]);
+        setDepartments(depts);
+        setLevels(lvls);
+      } catch (err) {
+        console.error("Failed to load departments or levels", err);
+      }
+    };
+    loadDeptsAndLevels();
+  }, []);
 
   useEffect(() => {
     if (profile) {
       setFormData({
         name: profile.name || '',
         studentId: profile.studentId || '',
-        major: (profile as any).major || '',
+        departmentId: (profile as any).departmentId || '',
+        levelId: (profile as any).levelId || '',
         phone: (profile as any).phone || '',
         address: (profile as any).address || ''
       });
@@ -68,7 +90,6 @@ const Biodata: React.FC = () => {
       alert('Hardware biometrics (Touch ID / Face ID / Windows Hello) enrolled successfully!');
     } catch (err: any) {
       console.error('Biometric registration failed:', err);
-      // Keep it user-friendly
       if (err.name === 'NotAllowedError') {
         alert('Biometric registration was cancelled or timed out.');
       } else {
@@ -86,6 +107,14 @@ const Biodata: React.FC = () => {
       alert("Student ID is required.");
       return;
     }
+    if (!formData.departmentId) {
+      alert("Department is required.");
+      return;
+    }
+    if (!formData.levelId) {
+      alert("Academic Level is required.");
+      return;
+    }
     if (!registeredFingerprint) {
       alert("Please register your Primary Device Fingerprint.");
       return;
@@ -98,17 +127,26 @@ const Biodata: React.FC = () => {
       await updateDoc(userRef, {
         name: formData.name,
         studentId: formData.studentId,
-        major: formData.major,
+        departmentId: formData.departmentId,
+        levelId: formData.levelId,
         phone: formData.phone,
         address: formData.address,
         registeredFingerprint
       });
 
       // 2. Sync to the students collection for attendance verification
-      await syncStudentBiodata(profile.email, formData.name, formData.studentId, registeredFingerprint);
+      await syncStudentBiodata(
+        profile.email,
+        formData.name,
+        formData.studentId,
+        formData.departmentId,
+        formData.levelId,
+        registeredFingerprint
+      );
 
       await logActivity(profile.uid, profile.name, 'Updated Biodata', 'Completed student registration profile', 'student');
       alert('Biodata updated successfully!');
+      navigate('/dashboard');
     } catch (error) {
       console.error("Error updating biodata:", error);
       alert('Failed to update biodata.');
@@ -151,7 +189,7 @@ const Biodata: React.FC = () => {
                 type="text" 
                 value={formData.name} 
                 onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
+                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
               />
             </div>
           </div>
@@ -165,26 +203,48 @@ const Biodata: React.FC = () => {
                 placeholder="e.g. STU001" 
                 value={formData.studentId} 
                 onChange={(e) => setFormData({...formData, studentId: e.target.value})}
-                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
+                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
               />
             </div>
           </div>
 
           <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Major / Course of Study</label>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Department <span style={{color: 'red'}}>*</span></label>
             <div style={{ position: 'relative' }}>
               <Book size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-              <input 
-                type="text" 
-                placeholder="e.g. Computer Science" 
-                value={formData.major} 
-                onChange={(e) => setFormData({...formData, major: e.target.value})}
-                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
-              />
+              <select 
+                value={formData.departmentId} 
+                onChange={(e) => setFormData({...formData, departmentId: e.target.value})}
+                required
+                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              >
+                <option value="">Select Department</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Academic Level <span style={{color: 'red'}}>*</span></label>
+            <div style={{ position: 'relative' }}>
+              <Hash size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+              <select 
+                value={formData.levelId} 
+                onChange={(e) => setFormData({...formData, levelId: e.target.value})}
+                required
+                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              >
+                <option value="">Select Level</option>
+                {levels.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: '1 / -1' }}>
             <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Phone Number</label>
             <div style={{ position: 'relative' }}>
               <Phone size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
@@ -193,7 +253,7 @@ const Biodata: React.FC = () => {
                 placeholder="+1 234 567 8900" 
                 value={formData.phone} 
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
+                style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
               />
             </div>
           </div>

@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getStudentCourses, joinCourse } from '../../services/courseService';
-import type { Course } from '../../services/courseService';
+import { 
+  getStudentCourses as _getStudentCourses,
+  updateStudentCourses, 
+  getCoursesByDeptAndLevel,
+  type Course
+} from '../../services/courseService';
 import { logActivity } from '../../services/activityService';
-import { Loader2, LogIn, Book, CheckCircle } from 'lucide-react';
+import { db } from '../../services/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { Loader2, Book, Check, Plus, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import './Courses.css';
 
 const RegisterCourse: React.FC = () => {
   const { profile } = useAuth();
-  const [courses, setCourses] = useState<Course[]>([]);
+  const navigate = useNavigate();
+  
+  const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
+  const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [hasProfile, setHasProfile] = useState(false);
 
   useEffect(() => {
     if (profile?.email) {
@@ -22,35 +32,65 @@ const RegisterCourse: React.FC = () => {
   const loadCourses = async () => {
     if (!profile) return;
     try {
-      const data = await getStudentCourses(profile.email);
-      setCourses(data);
+      // Fetch student document to get department, level and registered courses
+      const studentQuery = query(collection(db, 'students'), where('email', '==', profile.email));
+      const studentSnapshot = await getDocs(studentQuery);
+      
+      if (studentSnapshot.empty) {
+        setHasProfile(false);
+        setLoading(false);
+        return;
+      }
+      
+      const studentData = studentSnapshot.docs[0].data();
+      const enrolledIds: string[] = studentData.courses || [];
+      setEnrolledCourseIds(enrolledIds);
+      
+      const deptId = studentData.departmentId || '';
+      const lvlId = studentData.levelId || '';
+      
+      if (deptId && lvlId) {
+        setHasProfile(true);
+        const available = await getCoursesByDeptAndLevel(deptId, lvlId);
+        setAvailableCourses(available);
+      } else {
+        setHasProfile(false);
+      }
     } catch (error) {
-      console.error("Failed to load enrolled courses", error);
+      console.error("Failed to load courses", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoinCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile || !joinCode.trim()) return;
+  const handleToggleCourse = async (courseId: string) => {
+    if (!profile) return;
     
-    setJoining(true);
+    const isEnrolled = enrolledCourseIds.includes(courseId);
+    const updatedIds = isEnrolled 
+      ? enrolledCourseIds.filter(id => id !== courseId)
+      : [...enrolledCourseIds, courseId];
+      
+    setRegisteringId(courseId);
     try {
-      const result = await joinCourse(profile.email, joinCode.trim().toUpperCase());
-      if (result.success) {
-        await logActivity(profile.uid, profile.name, 'Enrolled in Course', `Used join code ${joinCode}`, 'student');
-        alert(result.message);
-        setJoinCode('');
-        await loadCourses();
+      const res = await updateStudentCourses(profile.email, updatedIds);
+      if (res.success) {
+        setEnrolledCourseIds(updatedIds);
+        await logActivity(
+          profile.uid, 
+          profile.name, 
+          isEnrolled ? 'Unregistered Course' : 'Registered Course', 
+          `Course ID: ${courseId}`, 
+          'student'
+        );
       } else {
-        alert(result.message);
+        alert(res.message);
       }
     } catch (error) {
-      console.error("Error joining course:", error);
-      alert("An error occurred while trying to join the course.");
+      console.error("Failed to toggle course registration:", error);
+      alert("Failed to update course registration.");
     } finally {
-      setJoining(false);
+      setRegisteringId(null);
     }
   };
 
@@ -59,70 +99,122 @@ const RegisterCourse: React.FC = () => {
   return (
     <div className="courses-page" style={{ padding: '2rem' }}>
       <div className="header-section" style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>My Courses</h1>
-        <p style={{ color: 'var(--text-tertiary)' }}>Register for new courses and view your current enrollments.</p>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>Course Registration</h1>
+        <p style={{ color: 'var(--text-tertiary)' }}>Click on the courses you have to register or unregister.</p>
       </div>
 
-      <div className="courses-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
-        
-        {/* Join Course Form */}
-        <div className="create-course-card" style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '15px', height: 'fit-content' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-            <LogIn size={20} /> Join a Course
-          </h3>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>
-            Ask your lecturer for the 6-character Join Code to enroll in their course.
-          </p>
-          <form onSubmit={handleJoinCourse} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <input 
-                type="text" 
-                required
-                placeholder="e.g. X7B9A2" 
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', textTransform: 'uppercase', letterSpacing: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}
-              />
-            </div>
-            <button 
-              type="submit" 
-              disabled={joining || joinCode.length < 6}
-              style={{ background: 'var(--accent-primary)', color: 'white', padding: '0.75rem', borderRadius: '8px', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', opacity: joinCode.length < 6 ? 0.5 : 1 }}
-            >
-              {joining ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle size={18} />}
-              {joining ? 'Verifying...' : 'Enroll Now'}
-            </button>
-          </form>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
+          <Loader2 className="animate-spin" size={36} color="var(--accent-primary)" />
         </div>
-
-        {/* Enrolled Courses */}
-        <div className="course-list">
+      ) : !hasProfile ? (
+        <div style={{ background: 'var(--bg-secondary)', padding: '3rem 2rem', borderRadius: '15px', textAlign: 'center', maxWidth: '500px', margin: '2rem auto' }}>
+          <AlertCircle size={48} color="var(--warning)" style={{ margin: '0 auto 1rem' }} />
+          <h3 style={{ marginBottom: '0.5rem' }}>Profile Incomplete</h3>
+          <p style={{ color: 'var(--text-tertiary)', marginBottom: '1.5rem', fontSize: '0.95rem', lineHeight: 1.6 }}>
+            Please complete your Biodata profile and select your Department and Academic Level before registering for courses.
+          </p>
+          <button 
+            className="add-btn" 
+            onClick={() => navigate('/biodata')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
+          >
+            Go to Biodata
+          </button>
+        </div>
+      ) : (
+        <div className="course-list-full">
           <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Book size={20} /> Enrolled Courses
+            <Book size={20} /> Available Courses for Your Level
           </h3>
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><Loader2 className="animate-spin" /></div>
-          ) : courses.length === 0 ? (
+          
+          {availableCourses.length === 0 ? (
             <div style={{ background: 'var(--bg-secondary)', padding: '3rem 2rem', borderRadius: '15px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
               <Book size={48} style={{ opacity: 0.2, margin: '0 auto 1rem' }} />
-              <p>You haven't enrolled in any courses yet.</p>
+              <p>No courses are registered under your department and level yet. Please check back later or contact your administrator.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem' }}>
-              {courses.map(course => (
-                <div key={course.id} className="course-card" style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '15px', borderTop: '4px solid var(--accent-primary)' }}>
-                  <h4 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{course.code}</h4>
-                  <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{course.title}</p>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 'bold' }}>Enrolled</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+              {availableCourses.map(course => {
+                const isEnrolled = enrolledCourseIds.includes(course.id || '');
+                const isProcessing = registeringId === course.id;
+                
+                return (
+                  <div 
+                    key={course.id} 
+                    onClick={() => course.id && !isProcessing && handleToggleCourse(course.id)}
+                    style={{ 
+                      background: isEnrolled ? 'rgba(99, 102, 241, 0.05)' : 'var(--bg-secondary)', 
+                      padding: '1.5rem', 
+                      borderRadius: '15px', 
+                      border: isEnrolled ? '2px solid var(--accent-primary)' : '2px solid var(--border-color)',
+                      cursor: isProcessing ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: isEnrolled ? '0 4px 12px rgba(99, 102, 241, 0.1)' : 'none'
+                    }}
+                    className="clickable-course-card"
+                  >
+                    <div>
+                      <span 
+                        style={{ 
+                          fontSize: '0.75rem', 
+                          fontWeight: 'bold', 
+                          background: isEnrolled ? 'var(--accent-primary)' : 'var(--bg-tertiary)', 
+                          color: isEnrolled ? 'white' : 'var(--text-secondary)',
+                          padding: '0.25rem 0.5rem', 
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          marginBottom: '0.75rem',
+                          textTransform: 'uppercase'
+                        }}
+                      >
+                        {course.code}
+                      </span>
+                      <h4 style={{ fontSize: '1.15rem', marginBottom: '0.5rem', fontWeight: 700 }}>{course.title}</h4>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                      {isProcessing ? (
+                        <Loader2 className="animate-spin" size={20} color="var(--accent-primary)" />
+                      ) : isEnrolled ? (
+                        <span 
+                          style={{ 
+                            fontSize: '0.8rem', 
+                            color: 'var(--success)', 
+                            fontWeight: 600, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.25rem' 
+                          }}
+                        >
+                          <Check size={16} /> Enrolled
+                        </span>
+                      ) : (
+                        <span 
+                          style={{ 
+                            fontSize: '0.8rem', 
+                            color: 'var(--text-tertiary)', 
+                            fontWeight: 500, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.25rem' 
+                          }}
+                        >
+                          <Plus size={16} /> Click to Register
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

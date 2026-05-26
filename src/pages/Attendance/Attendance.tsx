@@ -14,7 +14,7 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { doc, updateDoc, getDoc, onSnapshot, setDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, onSnapshot, setDoc, arrayUnion, collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebase';
 import { createAttendanceSession, endAttendanceSession, subscribeToSession } from '../../services/attendanceService';
@@ -62,30 +62,81 @@ const Attendance: React.FC = () => {
   useEffect(() => {
     fetchStudents();
 
-    const q = onSnapshot(doc(db, 'system', 'status'), async (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.activeSessionId) {
-          setSessionId(data.activeSessionId);
-          setIsSessionActive(true);
+    let unsubscribeStatus: (() => void) | undefined;
 
-          const sessionSnap = await getDoc(doc(db, 'sessions', data.activeSessionId));
-          if (sessionSnap.exists()) {
-            const sessionData = sessionSnap.data();
-            setActiveCourseInfo({
-              code: sessionData.courseId || '',
-              title: sessionData.courseName || ''
-            });
+    const setupSessionCheck = async () => {
+      if (profile?.role === 'student') {
+        try {
+          const studentQuery = query(collection(db, 'students'), where('email', '==', profile.email));
+          const studentSnapshot = await getDocs(studentQuery);
+          let studentCourseIds: string[] = [];
+          if (!studentSnapshot.empty) {
+            studentCourseIds = studentSnapshot.docs[0].data().courses || [];
           }
-        } else {
-          setIsSessionActive(false);
-          setSessionId('');
-          setActiveCourseInfo(null);
-          setAttendanceStatus('idle');
-          setSecurityError('');
+
+          unsubscribeStatus = onSnapshot(doc(db, 'system', 'status'), async (snap) => {
+            if (snap.exists()) {
+              const statusData = snap.data();
+              const activeSessionId = statusData.activeSessionId;
+
+              if (activeSessionId) {
+                const sessionSnap = await getDoc(doc(db, 'sessions', activeSessionId));
+                if (sessionSnap.exists()) {
+                  const sessionData = sessionSnap.data();
+                  const sessionCourseId = sessionData.courseId || '';
+
+                  if (studentCourseIds.includes(sessionCourseId)) {
+                    setSessionId(activeSessionId);
+                    setIsSessionActive(true);
+                    setActiveCourseInfo({
+                      code: sessionData.courseCode || sessionData.courseId || '',
+                      title: sessionData.courseName || ''
+                    });
+                    return;
+                  }
+                }
+              }
+              // If no active session or student is not enrolled in the active session's course
+              setIsSessionActive(false);
+              setSessionId('');
+              setActiveCourseInfo(null);
+              setAttendanceStatus('idle');
+              setSecurityError('');
+            }
+          });
+        } catch (err) {
+          console.error("Error setting up student session subscription:", err);
         }
+      } else {
+        // Lecturer or Admin setup
+        unsubscribeStatus = onSnapshot(doc(db, 'system', 'status'), async (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.activeSessionId) {
+              setSessionId(data.activeSessionId);
+              setIsSessionActive(true);
+
+              const sessionSnap = await getDoc(doc(db, 'sessions', data.activeSessionId));
+              if (sessionSnap.exists()) {
+                const sessionData = sessionSnap.data();
+                setActiveCourseInfo({
+                  code: sessionData.courseCode || sessionData.courseId || '',
+                  title: sessionData.courseName || ''
+                });
+              }
+            } else {
+              setIsSessionActive(false);
+              setSessionId('');
+              setActiveCourseInfo(null);
+              setAttendanceStatus('idle');
+              setSecurityError('');
+            }
+          }
+        });
       }
-    });
+    };
+
+    setupSessionCheck();
 
     if (profile?.role === 'lecturer' || profile?.role === 'admin') {
       loadLecturerCourses();
@@ -95,7 +146,9 @@ const Attendance: React.FC = () => {
       loadDeviceFingerprint();
     }
 
-    return () => q();
+    return () => {
+      if (unsubscribeStatus) unsubscribeStatus();
+    };
   }, [profile]);
 
   const loadDeviceFingerprint = async () => {
@@ -202,6 +255,7 @@ const Attendance: React.FC = () => {
     try {
       const newSessionId = await createAttendanceSession(
         profile.uid,
+        selectedCourse.id || '',
         selectedCourse.code,
         selectedCourse.title,
         isGeofenceEnabled ? (lecturerLocation || currentCoords || undefined) : undefined,

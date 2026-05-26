@@ -59,17 +59,24 @@ export const getStudentByStudentId = async (studentId: string) => {
   return { id: doc.id, ...doc.data() } as Student;
 };
 
-export const syncStudentBiodata = async (email: string, name: string, studentId: string, registeredFingerprint?: string) => {
-  // Check if student exists
+export const syncStudentBiodata = async (
+  email: string,
+  name: string,
+  studentId: string,
+  departmentId: string,
+  levelId: string,
+  registeredFingerprint?: string
+) => {
   const q = query(collection(db, 'students'), where('email', '==', email));
   const querySnapshot = await getDocs(q);
   
   if (!querySnapshot.empty) {
-    // Update existing
     const studentDoc = querySnapshot.docs[0];
     const updatePayload: any = {
       name,
       studentId,
+      departmentId,
+      levelId,
       lastSeen: serverTimestamp()
     };
     if (registeredFingerprint) {
@@ -77,11 +84,12 @@ export const syncStudentBiodata = async (email: string, name: string, studentId:
     }
     await updateDoc(doc(db, 'students', studentDoc.id), updatePayload);
   } else {
-    // Create new
     const newStudent: any = {
       name,
       email,
       studentId,
+      departmentId,
+      levelId,
       attendance: 0,
       status: 'active',
       courses: [],

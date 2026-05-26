@@ -22,7 +22,7 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'admin' | 'student'>('student');
+  const [role, setRole] = useState<'lecturer' | 'student'>('student');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -117,9 +117,9 @@ const Login: React.FC = () => {
                   </button>
                   <button 
                     type="button" 
-                    className={`role-choice ${role === 'admin' ? 'active' : ''}`}
-                    onClick={() => setRole('admin')}
-                    style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--border-color)', background: role === 'admin' ? 'var(--accent-primary)' : 'transparent', color: role === 'admin' ? 'white' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, transition: '0.2s' }}
+                    className={`role-choice ${role === 'lecturer' ? 'active' : ''}`}
+                    onClick={() => setRole('lecturer')}
+                    style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--border-color)', background: role === 'lecturer' ? 'var(--accent-primary)' : 'transparent', color: role === 'lecturer' ? 'white' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, transition: '0.2s' }}
                   >
                     Lecturer
                   </button>

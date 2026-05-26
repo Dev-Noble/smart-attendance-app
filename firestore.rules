@@ -16,7 +16,7 @@ service cloud.firestore {
     }
     
     function isLecturer() {
-      return isSignedIn() && getUserData().role == 'lecturer' || isAdmin();
+      return (isSignedIn() && getUserData().role == 'lecturer') || isAdmin();
     }
 
     // User profiles
@@ -41,7 +41,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Courses
+    // Courses — admin and lecturers can manage
     match /courses/{courseId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isLecturer();
@@ -64,6 +64,18 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
+    }
+
+    // Departments — admin manages, all signed-in users read
+    match /departments/{deptId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Academic levels — admin manages, all signed-in users read
+    match /levels/{levelId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
