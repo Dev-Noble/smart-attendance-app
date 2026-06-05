@@ -21,6 +21,8 @@ export interface Student {
   status: 'active' | 'at-risk' | 'inactive';
   lastSeen: any;
   avatar?: string;
+  phone?: string;
+  address?: string;
   courses?: string[]; // Array of course IDs the student is enrolled in
   registeredFingerprint?: string; // Stored hardware fingerprint for attendance
 }
@@ -59,12 +61,23 @@ export const getStudentByStudentId = async (studentId: string) => {
   return { id: doc.id, ...doc.data() } as Student;
 };
 
+export const getStudentsByCourse = async (courseId: string): Promise<Student[]> => {
+  const q = query(collection(db, 'students'), where('courses', 'array-contains', courseId));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  })) as Student[];
+};
+
 export const syncStudentBiodata = async (
   email: string,
   name: string,
   studentId: string,
   departmentId: string,
   levelId: string,
+  phone?: string,
+  address?: string,
   registeredFingerprint?: string
 ) => {
   const q = query(collection(db, 'students'), where('email', '==', email));
@@ -79,6 +92,8 @@ export const syncStudentBiodata = async (
       levelId,
       lastSeen: serverTimestamp()
     };
+    if (phone) updatePayload.phone = phone;
+    if (address) updatePayload.address = address;
     if (registeredFingerprint) {
       updatePayload.registeredFingerprint = registeredFingerprint;
     }
@@ -95,6 +110,8 @@ export const syncStudentBiodata = async (
       courses: [],
       lastSeen: serverTimestamp()
     };
+    if (phone) newStudent.phone = phone;
+    if (address) newStudent.address = address;
     if (registeredFingerprint) {
       newStudent.registeredFingerprint = registeredFingerprint;
     }

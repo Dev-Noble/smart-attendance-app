@@ -13,9 +13,11 @@ interface UserProfile {
   uid: string;
   email: string;
   name: string;
-  role: 'lecturer' | 'admin' | 'student';
+  role: 'lecturer' | 'admin' | 'student' | 'pending_lecturer';
   studentId?: string;
   avatar?: string;
+  phone?: string;
+  address?: string;
   createdAt: any;
 }
 

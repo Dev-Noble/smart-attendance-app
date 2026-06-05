@@ -141,6 +141,8 @@ const Biodata: React.FC = () => {
         formData.studentId,
         formData.departmentId,
         formData.levelId,
+        formData.phone,
+        formData.address,
         registeredFingerprint
       );
 

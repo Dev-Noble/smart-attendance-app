@@ -37,7 +37,8 @@ const Login: React.FC = () => {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
-        localStorage.setItem('pendingProfile', JSON.stringify({ name, role }));
+        const resolvedRole = role === 'lecturer' ? 'pending_lecturer' : 'student';
+        localStorage.setItem('pendingProfile', JSON.stringify({ name, role: resolvedRole }));
       }
 
       // Check for pending attendance scan
@@ -156,6 +157,28 @@ const Login: React.FC = () => {
                 required
               />
             </div>
+            {isLogin && (
+              <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                <button 
+                  type="button" 
+                  onClick={() => navigate('/forgot-password')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-primary, #6366f1)',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontWeight: 500,
+                    textDecoration: 'none'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                  onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
           </div>
 
           <button className="login-submit-btn" disabled={loading}>

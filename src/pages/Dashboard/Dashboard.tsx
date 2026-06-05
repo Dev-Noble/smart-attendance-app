@@ -145,7 +145,7 @@ const Dashboard: React.FC = () => {
               <tbody>
                 {mySessions.slice(0, 5).map((session) => (
                   <tr key={session.id}>
-                    <td>CS101 - Introduction to CS</td>
+                    <td>{session.courseCode} - {session.courseName}</td>
                     <td>{session.startTime?.toDate ? session.startTime.toDate().toLocaleDateString() : 'Recent'}</td>
                     <td><span className="status-badge active">Present</span></td>
                   </tr>

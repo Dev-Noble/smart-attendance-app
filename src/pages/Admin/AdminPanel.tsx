@@ -41,7 +41,8 @@ import {
   Layers,
   Bookmark,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import './AdminPanel.css';
 
@@ -49,12 +50,12 @@ interface AppUser {
   uid: string;
   email: string;
   name: string;
-  role: 'admin' | 'lecturer' | 'student';
+  role: 'admin' | 'lecturer' | 'student' | 'pending_lecturer';
   createdAt: any;
   studentId?: string;
 }
 
-const ROLES = ['admin', 'lecturer', 'student'] as const;
+const ROLES = ['admin', 'lecturer', 'student', 'pending_lecturer'] as const;
 
 type AdminTab = 'users' | 'departments' | 'levels' | 'courses' | 'reset';
 
@@ -329,11 +330,13 @@ const AdminPanel: React.FC = () => {
     admins: users.filter(u => u.role === 'admin').length,
     lecturers: users.filter(u => u.role === 'lecturer').length,
     students: users.filter(u => u.role === 'student').length,
+    pending: users.filter(u => u.role === 'pending_lecturer').length,
   };
 
   const roleIcon = (role: string) => {
     if (role === 'admin') return <Shield size={14} />;
     if (role === 'lecturer') return <BookOpen size={14} />;
+    if (role === 'pending_lecturer') return <Clock size={14} color="var(--warning)" />;
     return <GraduationCap size={14} />;
   };
 
@@ -427,7 +430,7 @@ const AdminPanel: React.FC = () => {
         {activeTab === 'users' && (
           <>
             {/* Stats */}
-            <div className="admin-stats-grid">
+            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
               <div className="admin-stat-card">
                 <Users size={20} className="stat-icon" />
                 <div>
@@ -454,6 +457,13 @@ const AdminPanel: React.FC = () => {
                 <div>
                   <span className="stat-number">{stats.students}</span>
                   <span className="stat-label">Students</span>
+                </div>
+              </div>
+              <div className="admin-stat-card" style={{ borderLeft: '3px solid var(--warning)' }}>
+                <Clock size={20} className="stat-icon" color="var(--warning)" />
+                <div>
+                  <span className="stat-number" style={{ color: 'var(--warning)' }}>{stats.pending}</span>
+                  <span className="stat-label">Pending Review</span>
                 </div>
               </div>
             </div>

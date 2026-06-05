@@ -8,6 +8,7 @@ import { logActivity } from '../../services/activityService';
 import { getDeviceFingerprint } from '../../utils/deviceFingerprint';
 import { verifyBiometrics } from '../../utils/webauthn';
 import { getCurrentPosition, getEffectiveDistance, getDistanceMeters } from '../../utils/geolocation';
+import { sendSMS } from '../../services/smsService';
 import './Attendance.css';
 
 type StatusType = 'loading' | 'success' | 'error' | 'already-marked' | 'ready-to-scan';
@@ -217,6 +218,18 @@ const MarkAttendance: React.FC = () => {
         deviceFingerprints: arrayUnion(fingerprintToSave)
       });
 
+      // Get course code for the SMS confirmation
+      let courseCode = 'Class';
+      try {
+        const sessionSnap = await getDoc(sessionRef);
+        const sessionData = sessionSnap.data();
+        if (sessionSnap.exists() && sessionData) {
+          courseCode = (sessionData as any).courseCode || 'Class';
+        }
+      } catch (err) {
+        console.error('Failed to get session details for SMS:', err);
+      }
+
       await logActivity(
         profile.uid,
         profile.name,
@@ -224,6 +237,19 @@ const MarkAttendance: React.FC = () => {
         `Joined session via QR code`,
         'attendance'
       );
+
+      // Send SMS confirmation receipt
+      const phone = (profile as any).phone;
+      if (phone) {
+        try {
+          await sendSMS(
+            phone,
+            `Hello ${profile.name}, your attendance for ${courseCode} has been recorded successfully!`
+          );
+        } catch (smsErr) {
+          console.error('Failed to send confirmation SMS:', smsErr);
+        }
+      }
 
       localStorage.removeItem('pendingAttendance');
       setStatus('success');

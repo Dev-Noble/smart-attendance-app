@@ -8,13 +8,18 @@ import {
   Save,
   Loader2,
   Trash2,
-  Hash
+  Hash,
+  Phone,
+  MapPin,
+  MessageSquare
 } from 'lucide-react';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logActivity } from '../../services/activityService';
+import { syncStudentBiodata } from '../../services/studentService';
+import { getBalance } from '../../services/smsService';
 import './Settings.css';
 
 const Settings: React.FC = () => {
@@ -23,15 +28,44 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    studentId: ''
+    studentId: '',
+    phone: '',
+    address: ''
   });
+
+  // Admin SMS Balance States
+  const [smsBalance, setSmsBalance] = useState<string | null>(null);
+  const [smsLoading, setSmsLoading] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setFormData({
         name: profile.name || '',
-        studentId: profile.studentId || ''
+        studentId: profile.studentId || '',
+        phone: (profile as any).phone || '',
+        address: (profile as any).address || ''
       });
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (profile?.role === 'admin') {
+      const fetchBalance = async () => {
+        setSmsLoading(true);
+        try {
+          const res = await getBalance();
+          if (res.status === 'success' && res.data) {
+            setSmsBalance(res.data.formatted);
+          } else {
+            setSmsBalance('Error loading balance');
+          }
+        } catch (err) {
+          setSmsBalance('API Connection Error');
+        } finally {
+          setSmsLoading(false);
+        }
+      };
+      fetchBalance();
     }
   }, [profile]);
 
@@ -40,10 +74,28 @@ const Settings: React.FC = () => {
     setSaving(true);
     try {
       const userRef = doc(db, 'users', profile.uid);
-      await updateDoc(userRef, {
+      const updatePayload: any = {
         name: formData.name,
-        studentId: formData.studentId
-      });
+        studentId: formData.studentId,
+        phone: formData.phone,
+        address: formData.address
+      };
+      await updateDoc(userRef, updatePayload);
+
+      // If user is a student, sync to the students collection
+      if (profile.role === 'student') {
+        await syncStudentBiodata(
+          profile.email,
+          formData.name,
+          formData.studentId,
+          (profile as any).departmentId || '',
+          (profile as any).levelId || '',
+          formData.phone,
+          formData.address,
+          (profile as any).registeredFingerprint || ''
+        );
+      }
+
       await logActivity(profile.uid, profile.name, 'Updated Profile', 'Changed personal information', 'system');
       alert('Profile updated successfully!');
     } catch (error) {
@@ -126,6 +178,35 @@ const Settings: React.FC = () => {
                 <input type="email" value={profile?.email || ''} disabled style={{ paddingLeft: '2.5rem', cursor: 'not-allowed', backgroundColor: 'var(--bg-tertiary)' }} />
               </div>
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>Phone Number</label>
+                <div style={{ position: 'relative' }}>
+                  <Phone size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input 
+                    type="tel" 
+                    placeholder="+234 800 123 4567"
+                    value={formData.phone} 
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Residential Address</label>
+                <div style={{ position: 'relative' }}>
+                  <MapPin size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input 
+                    type="text" 
+                    placeholder="Lagos, Nigeria"
+                    value={formData.address} 
+                    onChange={(e) => setFormData({...formData, address: e.target.value})} 
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -144,6 +225,57 @@ const Settings: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {profile?.role === 'admin' && (
+          <div className="settings-card">
+            <h3><MessageSquare size={20} /> SMS Gateway Configuration</h3>
+            <div className="settings-list" style={{ marginTop: '1rem' }}>
+              <div className="settings-row">
+                <div className="settings-info">
+                  <span className="settings-label">SMS Provider</span>
+                  <span className="settings-description">Active API endpoint for bulk messaging services.</span>
+                </div>
+                <span className="student-id-tag" style={{ background: 'var(--bg-tertiary)', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold', border: 'none', color: 'var(--text-secondary)' }}>
+                  BulkSMS Nigeria v2
+                </span>
+              </div>
+              
+              <div className="settings-row">
+                <div className="settings-info">
+                  <span className="settings-label">API Mode</span>
+                  <span className="settings-description">Toggle sandbox simulation or real production delivery in environment variables.</span>
+                </div>
+                <span className={`status-pill pill-${import.meta.env.VITE_BULKSMS_MODE === 'production' ? 'active' : 'inactive'}`} style={{ textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                  {import.meta.env.VITE_BULKSMS_MODE || 'sandbox'}
+                </span>
+              </div>
+              
+              <div className="settings-row">
+                <div className="settings-info">
+                  <span className="settings-label">Wallet Balance</span>
+                  <span className="settings-description">Current credits available for sending notifications.</span>
+                </div>
+                {smsLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <span style={{ fontWeight: 'bold', color: smsBalance?.includes('Error') || smsBalance?.includes('Connection') ? 'var(--danger)' : 'var(--success)', fontSize: '1.1rem' }}>
+                    {smsBalance || '₦0.00'}
+                  </span>
+                )}
+              </div>
+              
+              <div className="settings-row">
+                <div className="settings-info">
+                  <span className="settings-label">Sender ID</span>
+                  <span className="settings-description">ID displayed on recipient mobile devices (Max 11 chars).</span>
+                </div>
+                <code style={{ background: 'var(--bg-tertiary)', padding: '0.25rem 0.6rem', borderRadius: '4px', fontFamily: 'monospace', color: 'var(--accent-primary)', fontSize: '0.85rem' }}>
+                  {import.meta.env.VITE_BULKSMS_SENDER_ID || 'SMAS'}
+                </code>
+              </div>
+            </div>
+          </div>
+        )}
 
         {profile?.role === 'admin' && (
           <div className="settings-card danger-zone">

@@ -11,14 +11,21 @@ import {
   MapPin,
   Shield,
   SlidersHorizontal,
-  Fingerprint
+  Fingerprint,
+  UserCheck,
+  UserX,
+  Search
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { doc, updateDoc, getDoc, onSnapshot, setDoc, arrayUnion, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, onSnapshot, setDoc, arrayUnion, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebase';
 import { createAttendanceSession, endAttendanceSession, subscribeToSession } from '../../services/attendanceService';
-import { getStudentByStudentId, getStudents } from '../../services/studentService';
+import { getStudentByStudentId, getStudents, getStudentsByCourse } from '../../services/studentService';
+import type { Student } from '../../services/studentService';
+import { recalculateForCourse } from '../../services/attendanceCalculator';
+import { addNotification, addBulkNotificationsByEmails } from '../../services/notificationService';
+
 import { getLecturerCourses } from '../../services/courseService';
 import type { Course } from '../../services/courseService';
 import { logActivity } from '../../services/activityService';
@@ -56,6 +63,12 @@ const Attendance: React.FC = () => {
   const [deviceFingerprint, setDeviceFingerprint] = useState<string>('');
   const [securityError, setSecurityError] = useState<string>('');
   const [attendanceStatus, setAttendanceStatus] = useState<'idle' | 'success' | 'error' | 'already-marked'>('idle');
+
+  // Manual roster state
+  const [rosterStudents, setRosterStudents] = useState<Student[]>([]);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [manualMarkingId, setManualMarkingId] = useState<string | null>(null);
 
 
 
@@ -150,6 +163,134 @@ const Attendance: React.FC = () => {
       if (unsubscribeStatus) unsubscribeStatus();
     };
   }, [profile]);
+
+  // Load enrolled students for the roster when session becomes active
+  useEffect(() => {
+    if (isSessionActive && sessionId && (profile?.role === 'lecturer' || profile?.role === 'admin')) {
+      loadRosterStudents();
+    } else {
+      setRosterStudents([]);
+    }
+  }, [isSessionActive, sessionId, profile]);
+
+  const loadRosterStudents = async () => {
+    if (!sessionId) return;
+    setRosterLoading(true);
+    try {
+      // Get the course ID from the session
+      const sessionSnap = await getDoc(doc(db, 'sessions', sessionId));
+      if (sessionSnap.exists()) {
+        const sessionData = sessionSnap.data();
+        const courseId = sessionData.courseId;
+        if (courseId) {
+          const enrolled = await getStudentsByCourse(courseId);
+          setRosterStudents(enrolled);
+        } else {
+          // Fallback: load all students if no course is linked
+          const all = await getStudents();
+          setRosterStudents(all);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load roster students:', err);
+    } finally {
+      setRosterLoading(false);
+    }
+  };
+
+  const handleManualMark = async (studentId: string, studentName: string) => {
+    if (!sessionId) return;
+    setManualMarkingId(studentId);
+    try {
+      const sessionRef = doc(db, 'sessions', sessionId);
+      const sessionSnap = await getDoc(sessionRef);
+      if (sessionSnap.exists()) {
+        const sessionData = sessionSnap.data();
+        await updateDoc(sessionRef, {
+          studentsPresent: arrayUnion(studentId)
+        });
+        await logActivity(
+          profile?.uid || 'system',
+          profile?.name || 'Lecturer',
+          'Manual Mark Present',
+          `Marked ${studentName} (${studentId}) present in session ${sessionId}`,
+          'attendance'
+        );
+
+        // Notify the student
+        const student = await getStudentByStudentId(studentId);
+        if (student && student.email) {
+          const userQuery = query(collection(db, 'users'), where('email', '==', student.email));
+          const userSnap = await getDocs(userQuery);
+          if (!userSnap.empty) {
+            const studentUid = userSnap.docs[0].id;
+            await addNotification(
+              studentUid,
+              'Attendance Recorded (Manual Override)',
+              `Your attendance for ${activeCourseInfo?.code || 'course'} has been manually marked present by the lecturer.`,
+              'attendance'
+            );
+          }
+        }
+
+        // Recalculate attendance for this course
+        if (sessionData.courseId) {
+          await recalculateForCourse(sessionData.courseId);
+        }
+      }
+    } catch (err) {
+      console.error('Manual mark failed:', err);
+    } finally {
+      setManualMarkingId(null);
+    }
+  };
+
+  const handleManualUnmark = async (studentId: string, studentName: string) => {
+    if (!sessionId) return;
+    setManualMarkingId(studentId);
+    try {
+      const sessionRef = doc(db, 'sessions', sessionId);
+      const sessionSnap = await getDoc(sessionRef);
+      if (sessionSnap.exists()) {
+        const sessionData = sessionSnap.data();
+        await updateDoc(sessionRef, {
+          studentsPresent: arrayRemove(studentId)
+        });
+        await logActivity(
+          profile?.uid || 'system',
+          profile?.name || 'Lecturer',
+          'Manual Unmark',
+          `Unmarked ${studentName} (${studentId}) from session ${sessionId}`,
+          'attendance'
+        );
+
+        // Notify the student
+        const student = await getStudentByStudentId(studentId);
+        if (student && student.email) {
+          const userQuery = query(collection(db, 'users'), where('email', '==', student.email));
+          const userSnap = await getDocs(userQuery);
+          if (!userSnap.empty) {
+            const studentUid = userSnap.docs[0].id;
+            await addNotification(
+              studentUid,
+              'Attendance Removed',
+              `Your attendance for ${activeCourseInfo?.code || 'course'} has been unmarked by the lecturer.`,
+              'attendance'
+            );
+          }
+        }
+
+        // Recalculate attendance for this course
+        if (sessionData.courseId) {
+          await recalculateForCourse(sessionData.courseId);
+        }
+      }
+    } catch (err) {
+      console.error('Manual unmark failed:', err);
+    } finally {
+      setManualMarkingId(null);
+    }
+  };
 
   const loadDeviceFingerprint = async () => {
     const fp = await getDeviceFingerprint();
@@ -267,6 +408,18 @@ const Attendance: React.FC = () => {
       setIsSessionActive(true);
       setTimeLeft(1200);
       setActiveCourseInfo({ code: selectedCourse.code, title: selectedCourse.title });
+
+      // Notify enrolled students
+      const enrolledStudents = await getStudentsByCourse(selectedCourse.id || '');
+      const studentEmails = enrolledStudents.map(s => s.email).filter(Boolean);
+      if (studentEmails.length > 0) {
+        addBulkNotificationsByEmails(
+          studentEmails,
+          'Attendance Session Started',
+          `An attendance session has started for ${selectedCourse.code} — ${selectedCourse.title}. Please mark your attendance.`,
+          'session'
+        ).catch(err => console.error('Failed to send bulk notifications:', err));
+      }
     } catch (error) {
       console.error('Error starting session:', error);
       alert('Failed to start session. Please try again.');
@@ -275,9 +428,22 @@ const Attendance: React.FC = () => {
 
   const stopSession = async () => {
     if (sessionId) {
-      await endAttendanceSession(sessionId);
-      await setDoc(doc(db, 'system', 'status'), { activeSessionId: null }, { merge: true });
-      await logActivity(profile?.uid || 'system', profile?.name || 'Lecturer', 'Ended Session', `Course: ${activeCourseInfo?.code || 'Unknown'}`, 'attendance');
+      try {
+        const sessionRef = doc(db, 'sessions', sessionId);
+        const snap = await getDoc(sessionRef);
+        const sessionData = snap.data();
+        const courseId = sessionData?.courseId;
+
+        await endAttendanceSession(sessionId);
+        await setDoc(doc(db, 'system', 'status'), { activeSessionId: null }, { merge: true });
+        await logActivity(profile?.uid || 'system', profile?.name || 'Lecturer', 'Ended Session', `Course: ${activeCourseInfo?.code || 'Unknown'}`, 'attendance');
+
+        if (courseId) {
+          await recalculateForCourse(courseId);
+        }
+      } catch (err) {
+        console.error('Failed to end session and recalculate:', err);
+      }
     }
     setIsSessionActive(false);
     setSessionId('');
@@ -406,6 +572,14 @@ const Attendance: React.FC = () => {
         studentProfile.name,
         'Marked Attendance',
         `Joined session ${sessionId}`,
+        'attendance'
+      );
+
+      // Notify the student
+      await addNotification(
+        studentProfile.uid,
+        'Attendance Recorded',
+        `Your attendance has been recorded for ${activeCourseInfo?.code || 'course'}.`,
         'attendance'
       );
 
@@ -696,6 +870,88 @@ const Attendance: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* ── MANUAL ROSTER MARKING PANEL ──────────────────────────── */}
+            {isSessionActive && (
+              <div className="roster-panel">
+                <div className="roster-header">
+                  <h3><UserCheck size={18} /> Class Roster — Manual Override</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                    {rosterStudents.length} enrolled
+                  </span>
+                </div>
+
+                <div className="roster-search-bar">
+                  <Search size={16} color="var(--text-tertiary)" />
+                  <input
+                    type="text"
+                    placeholder="Search by name or student ID..."
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="roster-list">
+                  {rosterLoading ? (
+                    <div className="roster-empty">
+                      <Loader2 className="animate-spin" size={24} />
+                      <p>Loading enrolled students...</p>
+                    </div>
+                  ) : rosterStudents.length === 0 ? (
+                    <div className="roster-empty">
+                      <Users size={24} color="var(--text-tertiary)" />
+                      <p>No enrolled students found for this course.</p>
+                    </div>
+                  ) : (
+                    rosterStudents
+                      .filter(s => {
+                        const q = rosterSearch.toLowerCase();
+                        return !q || s.name.toLowerCase().includes(q) || s.studentId.toLowerCase().includes(q);
+                      })
+                      .map(student => {
+                        const isPresent = scannedStudents.some(ss => ss.studentId === student.studentId);
+                        const isProcessing = manualMarkingId === student.studentId;
+                        return (
+                          <div key={student.id || student.studentId} className={`roster-item ${isPresent ? 'present' : ''}`}>
+                            <div className="roster-student-info">
+                              <div className="roster-avatar" style={{ background: isPresent ? 'var(--success)' : 'var(--bg-tertiary)' }}>
+                                {student.name[0]?.toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="roster-name">{student.name}</span>
+                                <span className="roster-sid">{student.studentId}</span>
+                              </div>
+                            </div>
+                            <div className="roster-actions">
+                              {isPresent ? (
+                                <button
+                                  className="roster-btn unmark"
+                                  onClick={() => handleManualUnmark(student.studentId, student.name)}
+                                  disabled={isProcessing}
+                                  title="Unmark attendance"
+                                >
+                                  {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
+                                  <span>Remove</span>
+                                </button>
+                              ) : (
+                                <button
+                                  className="roster-btn mark"
+                                  onClick={() => handleManualMark(student.studentId, student.name)}
+                                  disabled={isProcessing}
+                                  title="Manually mark present"
+                                >
+                                  {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
+                                  <span>Mark Present</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="list-section">
               <div className="section-header">

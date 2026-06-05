@@ -9,20 +9,58 @@ import {
   CheckCircle2, 
   XCircle, 
   Clock,
-  Download
+  Download,
+  MessageSquare,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { getStudentByStudentId } from '../../services/studentService';
 import type { Student } from '../../services/studentService';
 import { getAllSessions } from '../../services/attendanceService';
 import type { AttendanceSession } from '../../services/attendanceService';
+import { sendSMS } from '../../services/smsService';
+import { useAuth } from '../../context/AuthContext';
 import './Students.css';
 
 const StudentProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [student, setStudent] = useState<Student | null>(null);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // SMS Modal States
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsBody, setSmsBody] = useState('');
+  const [sendingSms, setSendingSms] = useState(false);
+
+  const handleSendSms = async () => {
+    if (!student?.phone) {
+      alert('This student does not have a registered phone number.');
+      return;
+    }
+    if (!smsBody.trim()) {
+      alert('Please enter message text.');
+      return;
+    }
+    setSendingSms(true);
+    try {
+      const res = await sendSMS(student.phone, smsBody.trim());
+      if (res.status === 'success') {
+        alert('SMS sent successfully!');
+        setShowSmsModal(false);
+        setSmsBody('');
+      } else {
+        alert(`Failed to send SMS: ${res.message}`);
+      }
+    } catch (err: any) {
+      console.error('Error sending SMS:', err);
+      alert('Failed to send SMS due to a network error.');
+    } finally {
+      setSendingSms(false);
+    }
+  };
 
   useEffect(() => {
     const fetchStudentData = async () => {
@@ -74,9 +112,23 @@ const StudentProfile: React.FC = () => {
             <p>Viewing detailed records for {student.name}</p>
           </div>
         </div>
-        <button className="add-btn">
-          <Download size={18} /> Export Report
-        </button>
+        <div className="header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
+          {(profile?.role === 'admin' || profile?.role === 'lecturer') && (
+            <button 
+              className="btn-secondary" 
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+              onClick={() => setShowSmsModal(true)}
+              disabled={!student.phone}
+              title={student.phone ? 'Send SMS notification to student' : 'No phone number registered'}
+            >
+              <MessageSquare size={18} />
+              Send SMS Alert
+            </button>
+          )}
+          <button className="add-btn">
+            <Download size={18} /> Export Report
+          </button>
+        </div>
       </div>
 
       <div className="profile-grid">
@@ -102,11 +154,11 @@ const StudentProfile: React.FC = () => {
               </div>
               <div className="info-item">
                 <Phone size={16} />
-                <span>+234 800 123 4567</span>
+                <span>{student.phone || 'N/A'}</span>
               </div>
               <div className="info-item">
                 <MapPin size={16} />
-                <span>Lagos, Nigeria</span>
+                <span>{student.address || 'N/A'}</span>
               </div>
               <div className="info-item">
                 <Calendar size={16} />
@@ -170,6 +222,56 @@ const StudentProfile: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* SMS Sending Modal */}
+      {showSmsModal && (
+        <div className="admin-modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, padding: '1rem' }}>
+          <div className="admin-confirm-card" style={{ maxWidth: '480px', width: '100%', padding: '2rem', background: 'var(--bg-secondary)', borderRadius: '15px', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--accent-primary)' }}>
+              <MessageSquare size={24} />
+              <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Send SMS Alert</h3>
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>
+              Send a direct SMS notification to <strong>{student.name}</strong> at <strong>{student.phone}</strong>.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Message Content</label>
+              <textarea
+                value={smsBody}
+                onChange={(e) => setSmsBody(e.target.value)}
+                placeholder="Type your alert message here..."
+                maxLength={160}
+                style={{ width: '100%', minHeight: '100px', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', resize: 'vertical', fontSize: '0.9rem', fontFamily: 'inherit' }}
+              />
+              <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                {smsBody.length}/160 characters (1 segment)
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button 
+                type="button" 
+                className="admin-btn admin-btn-ghost" 
+                onClick={() => { setShowSmsModal(false); setSmsBody(''); }}
+                disabled={sendingSms}
+                style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleSendSms}
+                disabled={sendingSms || !smsBody.trim()}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.25rem', borderRadius: '8px', border: 'none', background: 'var(--accent-primary)', color: 'white', fontWeight: 600, cursor: (sendingSms || !smsBody.trim()) ? 'not-allowed' : 'pointer', opacity: (sendingSms || !smsBody.trim()) ? 0.7 : 1 }}
+              >
+                {sendingSms ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {sendingSms ? 'Sending...' : 'Send SMS'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
