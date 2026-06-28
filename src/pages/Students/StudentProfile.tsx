@@ -66,13 +66,14 @@ const StudentProfile: React.FC = () => {
     const fetchStudentData = async () => {
       if (!id) return;
       try {
-        const studentData = await getStudentByStudentId(id);
+        const decodedId = decodeURIComponent(id);
+        const studentData = await getStudentByStudentId(decodedId);
         if (studentData) {
           setStudent(studentData);
           const allSessions = await getAllSessions();
           // Filter sessions where this student was present
           const studentSessions = allSessions.filter(s => 
-            s.studentsPresent?.includes(id)
+            s.studentsPresent?.includes(decodedId)
           );
           setSessions(studentSessions);
         }

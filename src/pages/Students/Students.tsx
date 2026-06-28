@@ -258,7 +258,7 @@ const Students: React.FC = () => {
             </thead>
             <tbody>
               {filteredStudents.map((student) => (
-                <tr key={student.id} onClick={() => navigate(`/students/${student.studentId}`)} style={{ cursor: 'pointer' }}>
+                <tr key={student.id} onClick={() => navigate(`/students/${encodeURIComponent(student.studentId)}`)} style={{ cursor: 'pointer' }}>
                   <td>
                     <div className="student-info">
                       <div className="student-avatar" style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e2e8f0', borderRadius: '50%', fontSize: '0.75rem' }}>

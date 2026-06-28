@@ -293,7 +293,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="risk-list">
             {students.filter(s => s.status === 'at-risk').slice(0, 5).map((student) => (
-              <div key={student.id} className="risk-item" onClick={() => navigate(`/students/${student.studentId}`)} style={{ cursor: 'pointer' }}>
+              <div key={student.id} className="risk-item" onClick={() => navigate(`/students/${encodeURIComponent(student.studentId)}`)} style={{ cursor: 'pointer' }}>
                 <div className="student-info">
                   <div className="student-avatar" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e2e8f0', borderRadius: '50%' }}>
                     {student.avatar ? <img src={student.avatar} alt="" /> : student.name.split(' ').map(n => n[0]).join('')}
