@@ -394,11 +394,38 @@ const AdminPanel: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="admin-header">
+      <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1><Shield size={24} style={{ verticalAlign: 'middle', marginRight: '0.5rem' }} />Admin Panel</h1>
           <p>Configure academic departments, courses, levels, and user accounts.</p>
         </div>
+        <button 
+          className="admin-btn admin-btn-danger"
+          onClick={async () => {
+            try {
+              const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+              const { db } = await import('../../services/firebase');
+              const docRef = await addDoc(collection(db, 'students'), {
+                name: "Jane Smith (At Risk)",
+                email: "jane.smith.atrisk@crawforduniversity.edu.ng",
+                studentId: "CU/23/0099",
+                departmentId: "Computer Science",
+                levelId: "400 Level",
+                attendance: 15,
+                status: "at-risk",
+                courses: [],
+                phone: "+2348011112222",
+                address: "Crawford University Hostel C",
+                lastSeen: serverTimestamp()
+              });
+              alert("At-Risk Student seeded successfully! Document ID: " + docRef.id);
+            } catch(e: any) {
+              alert("Error: " + e.message);
+            }
+          }}
+        >
+          Seed At-Risk Student
+        </button>
       </div>
 
       {/* Tabs Menu */}
