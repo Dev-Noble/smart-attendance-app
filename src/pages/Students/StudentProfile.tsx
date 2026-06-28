@@ -52,7 +52,8 @@ const StudentProfile: React.FC = () => {
         setShowSmsModal(false);
         setSmsBody('');
       } else {
-        alert(`Failed to send SMS: ${res.message}`);
+        const errorMsg = res.error?.message || res.message || JSON.stringify(res);
+        alert(`Failed to send SMS: ${errorMsg}`);
       }
     } catch (err: any) {
       console.error('Error sending SMS:', err);
