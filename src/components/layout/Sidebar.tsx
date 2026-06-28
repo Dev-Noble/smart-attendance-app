@@ -7,7 +7,6 @@ import {
   Users, 
   Settings, 
   LogOut,
-  GraduationCap,
   X,
   BookOpen,
   FileText,
@@ -45,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
-        <GraduationCap size={32} className="logo-icon" />
+        <img src="https://upload.wikimedia.org/wikipedia/en/c/cb/Crawford_University_logo.png" alt="Crawford University Logo" className="logo-icon" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
         <span>SMAS</span>
         <button className="mobile-close" onClick={onClose}>
           <X size={24} />

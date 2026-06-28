@@ -76,7 +76,7 @@ const Dashboard: React.FC = () => {
   const distributionData = [
     { name: 'Active', value: students.filter(s => s.status === 'active').length, color: '#10b981' },
     { name: 'At Risk', value: atRiskCount, color: '#f59e0b' },
-    { name: 'Inactive', value: students.filter(s => s.status === 'inactive').length, color: '#6366f1' },
+    { name: 'Inactive', value: students.filter(s => s.status === 'inactive').length, color: '#0a3d91' },
   ].filter(d => d.value > 0);
 
   if (loading) {

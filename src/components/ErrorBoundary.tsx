@@ -108,7 +108,7 @@ class ErrorBoundary extends Component<Props, State> {
                 padding: '0.75rem 2rem',
                 borderRadius: '10px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                background: 'linear-gradient(135deg, #0a3d91, #072b6b)',
                 color: 'white',
                 fontWeight: 600,
                 fontSize: '0.9rem',

@@ -12,7 +12,6 @@ import {
   UserPlus, 
   AlertCircle,
   Loader2,
-  GraduationCap,
   UserCircle
 } from 'lucide-react';
 import './Login.css';
@@ -61,7 +60,7 @@ const Login: React.FC = () => {
       <div className="login-glass-card">
         <div className="login-header">
           <div className="login-logo">
-            <GraduationCap size={40} color="var(--accent-primary)" />
+            <img src="https://upload.wikimedia.org/wikipedia/en/c/cb/Crawford_University_logo.png" alt="Crawford University Logo" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
             <h1>SMAS</h1>
           </div>
           <p className="login-subtitle">Student Management & Attendance System</p>
@@ -165,7 +164,7 @@ const Login: React.FC = () => {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: 'var(--accent-primary, #6366f1)',
+                    color: 'var(--accent-primary, #0a3d91)',
                     fontSize: '0.85rem',
                     cursor: 'pointer',
                     padding: 0,

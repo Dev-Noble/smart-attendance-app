@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldAlert, LogOut, Clock, GraduationCap } from 'lucide-react';
+import { ShieldAlert, LogOut, Clock } from 'lucide-react';
 import './Login.css';
 
 const PendingApproval: React.FC = () => {
@@ -11,7 +11,7 @@ const PendingApproval: React.FC = () => {
       <div className="login-glass-card" style={{ maxWidth: '480px', padding: '3rem 2rem' }}>
         <div className="login-header">
           <div className="login-logo">
-            <GraduationCap size={40} color="var(--accent-primary)" />
+            <img src="https://upload.wikimedia.org/wikipedia/en/c/cb/Crawford_University_logo.png" alt="Crawford University Logo" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
             <h1>SMAS</h1>
           </div>
           <p className="login-subtitle">Student Management & Attendance System</p>

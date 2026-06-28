@@ -51,7 +51,7 @@
   flex-shrink: 0;
 }
 
-.stat-icon.admin { color: #8b5cf6; }
+.stat-icon.admin { color: #f4b41a; }
 .stat-icon.lecturer { color: #3b82f6; }
 .stat-icon.student { color: #10b981; }
 
@@ -211,7 +211,7 @@
   text-transform: capitalize;
 }
 
-.admin-role-badge.admin { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+.admin-role-badge.admin { background: rgba(244, 180, 26, 0.15); color: #f4b41a; }
 .admin-role-badge.lecturer { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
 .admin-role-badge.student { background: rgba(16, 185, 129, 0.15); color: #10b981; }
 
@@ -555,7 +555,7 @@
 }
 
 .admin-submit-btn:hover {
-  background: var(--accent-secondary, #4f46e5);
+  background: var(--accent-secondary, #f4b41a);
 }
 
 .admin-submit-btn:disabled {
